@@ -406,4 +406,75 @@ def _get_tool_list() -> list[dict]:
                 },
             },
         },
+        {
+            "name": "emad_chat",
+            "description": "Send a message to a named eMAD instance and receive a response",
+            "inputSchema": {
+                "type": "object",
+                "required": ["emad_name", "message"],
+                "properties": {
+                    "emad_name": {"type": "string", "description": "Name of the eMAD instance"},
+                    "conversation_id": {"type": "string", "description": "Conversation ID for session continuity"},
+                    "message": {"type": "string", "description": "Message to send to the eMAD"},
+                },
+            },
+        },
+        {
+            "name": "emad_install_package",
+            "description": "Install an eMAD package and refresh the registry",
+            "inputSchema": {
+                "type": "object",
+                "required": ["package_name"],
+                "properties": {
+                    "package_name": {"type": "string", "description": "Python package name of the eMAD"},
+                    "version": {"type": "string", "description": "Specific version to install. Omit for latest."},
+                },
+            },
+        },
+        {
+            "name": "emad_create",
+            "description": "Register a new named eMAD instance backed by an installed package",
+            "inputSchema": {
+                "type": "object",
+                "required": ["emad_name", "package_name"],
+                "properties": {
+                    "emad_name": {"type": "string", "description": "Unique name for the eMAD instance"},
+                    "package_name": {"type": "string", "description": "Installed eMAD package to back this instance"},
+                    "description": {"type": "string", "description": "Human-readable description"},
+                    "parameters": {"type": "object", "description": "Instance parameters (e.g., system_prompt)"},
+                },
+            },
+        },
+        {
+            "name": "emad_update",
+            "description": "Update parameters or description of an existing eMAD instance",
+            "inputSchema": {
+                "type": "object",
+                "required": ["emad_name"],
+                "properties": {
+                    "emad_name": {"type": "string", "description": "Name of the eMAD instance to update"},
+                    "description": {"type": "string", "description": "New description (optional)"},
+                    "parameters": {"type": "object", "description": "New parameters (optional)"},
+                },
+            },
+        },
+        {
+            "name": "emad_delete",
+            "description": "Remove a named eMAD instance. Does not uninstall the backing package.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["emad_name"],
+                "properties": {
+                    "emad_name": {"type": "string", "description": "Name of the eMAD instance to delete"},
+                },
+            },
+        },
+        {
+            "name": "emad_list",
+            "description": "List all registered eMAD instances with their package, parameters, and status",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+            },
+        },
     ]

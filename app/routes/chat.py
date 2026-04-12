@@ -12,6 +12,7 @@ import time
 import uuid
 from typing import AsyncGenerator
 
+import asyncpg
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -28,6 +29,29 @@ from app.routes.caller_identity import resolve_caller
 _log = logging.getLogger("context_broker.routes.chat")
 
 router = APIRouter()
+
+
+async def _lookup_emad_instance(model: str) -> dict | None:
+    """Check if model name matches an active eMAD instance.
+
+    Returns the instance row dict if found and active, None otherwise.
+    Non-fatal — returns None on any DB error so the Imperator fallback works.
+    """
+    try:
+        from app.database import get_pg_pool
+
+        pool = get_pg_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT emad_name, package_name, parameters, status "
+                "FROM emad_instances WHERE emad_name = $1",
+                model,
+            )
+        if row is not None and row["status"] == "active":
+            return dict(row)
+    except (asyncpg.PostgresError, asyncpg.InterfaceError, RuntimeError, OSError):
+        pass
+    return None
 
 
 @router.post("/v1/chat/completions", response_model=None)
@@ -141,6 +165,14 @@ async def chat_completions(request: Request):
         },
     }
 
+    # ── eMAD routing: if model matches a registered eMAD, dispatch to it ──
+    emad_instance = await _lookup_emad_instance(chat_request.model)
+    if emad_instance is not None:
+        return await _handle_emad_request(
+            emad_instance, chat_request, lc_messages, config
+        )
+
+    # ── Imperator (default) ──
     initial_state = {
         "messages": lc_messages,
         "context_window_id": str(context_window_id) if context_window_id else None,
@@ -288,3 +320,192 @@ def _build_completion_response(response_text: str, model: str) -> dict:
             "total_tokens": -1,
         },
     }
+
+
+# ── eMAD dispatch via OpenAI-compatible endpoint ──────────────────────────
+
+
+async def _handle_emad_request(
+    emad_instance: dict,
+    chat_request: ChatCompletionRequest,
+    lc_messages: list,
+    config: dict,
+) -> JSONResponse | StreamingResponse:
+    """Dispatch a chat request to an eMAD instance.
+
+    Builds the eMAD's StateGraph from the registered package, invokes it,
+    and returns the response in OpenAI-compatible format. Supports streaming
+    via astream_events (same pattern as kaiser-langgraph/server.py).
+    """
+    from app import emad_registry
+
+    model = emad_instance["emad_name"]
+    package_name = emad_instance["package_name"]
+    parameters = dict(emad_instance["parameters"]) if emad_instance["parameters"] else {}
+
+    build_func = emad_registry.get_build_func(package_name)
+    if build_func is None:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "message": f"Package not loaded: {package_name}",
+                    "type": "server_error",
+                }
+            },
+        )
+
+    try:
+        graph = build_func(parameters)
+    except (TypeError, ImportError, RuntimeError) as exc:
+        _log.error("eMAD build error for %s: %s", model, exc)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "message": f"eMAD build error: {exc}",
+                    "type": "server_error",
+                }
+            },
+        )
+
+    # Extract last user message content
+    last_user = ""
+    for msg in reversed(lc_messages):
+        if isinstance(msg, HumanMessage):
+            last_user = msg.content
+            break
+
+    # Initial state per ERQ-004 §2.1
+    initial_state = {
+        "messages": [HumanMessage(content=last_user)],
+        "rogers_conversation_id": "",
+        "rogers_context_window_id": None,
+        "config": config,
+    }
+
+    if chat_request.stream:
+        return StreamingResponse(
+            _stream_emad_response(graph, initial_state, chat_request, model),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    # Non-streaming: invoke and return
+    try:
+        result = await graph.ainvoke(initial_state)
+        response_text = (
+            result.get("final_response")
+            or result.get("response_text")
+            or "[No response from eMAD]"
+        )
+        return JSONResponse(content=_build_completion_response(response_text, model))
+    except (RuntimeError, ValueError, TypeError, OSError) as exc:
+        _log.error("eMAD invocation error for %s: %s", model, exc)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "message": "eMAD execution error",
+                    "type": "internal_error",
+                }
+            },
+        )
+
+
+async def _stream_emad_response(
+    graph,
+    initial_state: dict,
+    chat_request: ChatCompletionRequest,
+    model: str,
+) -> AsyncGenerator[str, None]:
+    """Stream eMAD response as SSE tokens.
+
+    Same pattern as kaiser-langgraph/server.py:openai_chat_completions().
+    Uses astream_events(version="v2") to capture on_chat_model_stream events.
+    """
+    completion_id = f"chatcmpl-emad-{uuid.uuid4().hex}"
+    created = int(time.time())
+    first_content = True
+    yielded_any = False
+
+    try:
+        async for event in graph.astream_events(initial_state, version="v2"):
+            kind = event["event"]
+            if kind == "on_chat_model_stream":
+                chunk_data = event["data"].get("chunk")
+                if chunk_data is None:
+                    continue
+                content = chunk_data.content if hasattr(chunk_data, "content") else ""
+                if not content:
+                    continue
+                delta = {"content": content}
+                if first_content:
+                    delta["role"] = "assistant"
+                    first_content = False
+                sse_chunk = json.dumps(
+                    {
+                        "id": completion_id,
+                        "object": "chat.completion.chunk",
+                        "created": created,
+                        "model": model,
+                        "choices": [
+                            {"index": 0, "delta": delta, "finish_reason": None}
+                        ],
+                    }
+                )
+                yield f"data: {sse_chunk}\n\n"
+                yielded_any = True
+            elif kind == "on_chat_model_end":
+                # Fallback for eMADs that disable streaming
+                if not yielded_any:
+                    output_msg = event.get("data", {}).get("output")
+                    if (
+                        output_msg is not None
+                        and hasattr(output_msg, "content")
+                        and output_msg.content
+                    ):
+                        has_tool_calls = bool(
+                            getattr(output_msg, "tool_calls", None)
+                            or getattr(output_msg, "additional_kwargs", {}).get(
+                                "tool_calls"
+                            )
+                        )
+                        if not has_tool_calls:
+                            content = (
+                                output_msg.content
+                                if isinstance(output_msg.content, str)
+                                else str(output_msg.content)
+                            )
+                            delta = {"role": "assistant", "content": content}
+                            sse_chunk = json.dumps(
+                                {
+                                    "id": completion_id,
+                                    "object": "chat.completion.chunk",
+                                    "created": created,
+                                    "model": model,
+                                    "choices": [
+                                        {
+                                            "index": 0,
+                                            "delta": delta,
+                                            "finish_reason": None,
+                                        }
+                                    ],
+                                }
+                            )
+                            yield f"data: {sse_chunk}\n\n"
+                            yielded_any = True
+    except (RuntimeError, ValueError, TypeError, OSError) as exc:
+        _log.error("eMAD streaming error: %s", exc)
+
+    # Final chunk
+    final = json.dumps(
+        {
+            "id": completion_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": model,
+            "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+        }
+    )
+    yield f"data: {final}\n\ndata: [DONE]\n\n"

@@ -53,6 +53,7 @@ packages:
   stategraph_packages:
   - context-broker-ae
   - context-broker-te
+  - emad-generic
 reranker:
   base_url: http://context-broker-infinity:7997
   model: mixedbread-ai/mxbai-rerank-xsmall-v1

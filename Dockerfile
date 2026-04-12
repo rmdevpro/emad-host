@@ -59,9 +59,11 @@ RUN chmod +x ./entrypoint.sh
 # entrypoint.sh installs them at startup via pip install --user --no-deps.
 COPY --chown=${USER_NAME}:${USER_NAME} packages/context-broker-ae/ ./sg-src/context-broker-ae/
 COPY --chown=${USER_NAME}:${USER_NAME} packages/context-broker-te/ ./sg-src/context-broker-te/
+COPY --chown=${USER_NAME}:${USER_NAME} packages/emad-generic/ ./sg-src/emad-generic/
 RUN mkdir -p ./stategraph-wheels && \
     pip wheel --no-deps -w ./stategraph-wheels/ ./sg-src/context-broker-ae/ && \
     pip wheel --no-deps -w ./stategraph-wheels/ ./sg-src/context-broker-te/ && \
+    pip wheel --no-deps -w ./stategraph-wheels/ ./sg-src/emad-generic/ && \
     rm -rf ./sg-src
 
 EXPOSE 8000

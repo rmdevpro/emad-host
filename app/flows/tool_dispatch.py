@@ -14,6 +14,11 @@ from typing import Any
 from app.metrics_registry import MCP_REQUESTS, MCP_REQUEST_DURATION
 from app.stategraph_registry import get_flow_builder, get_imperator_builder
 from app.models import (
+    EmadChatInput,
+    EmadCreateInput,
+    EmadDeleteInput,
+    EmadInstallPackageInput,
+    EmadUpdateInput,
     ImperatorChatInput,
     MetricsGetInput,
 )
@@ -50,9 +55,37 @@ def _get_imperator_flow() -> Any:
     return _flow_cache["imperator"]
 
 
+_emad_flow_builders = {
+    "emad_chat": "app.flows.emad_dispatch:build_emad_chat_flow",
+    "emad_install_package": "app.flows.emad_management:build_install_emad_package_flow",
+    "emad_create": "app.flows.emad_management:build_create_emad_flow",
+    "emad_update": "app.flows.emad_management:build_update_emad_flow",
+    "emad_delete": "app.flows.emad_management:build_delete_emad_flow",
+    "emad_list": "app.flows.emad_management:build_list_emads_flow",
+}
+
+_emad_flow_cache: dict[str, Any] = {}
+
+
+def _get_emad_flow(name: str) -> Any:
+    """Get a compiled eMAD management flow by name (lazy singleton)."""
+    if name not in _emad_flow_cache:
+        ref = _emad_flow_builders.get(name)
+        if ref is None:
+            raise RuntimeError(f"Unknown eMAD flow: {name}")
+        module_path, func_name = ref.rsplit(":", 1)
+        import importlib
+
+        module = importlib.import_module(module_path)
+        builder = getattr(module, func_name)
+        _emad_flow_cache[name] = builder()
+    return _emad_flow_cache[name]
+
+
 def invalidate_flow_cache() -> None:
     """Clear all cached flows. Called after install_stategraph()."""
     _flow_cache.clear()
+    _emad_flow_cache.clear()
     _log.info("Flow dispatch cache cleared")
 
 
@@ -144,6 +177,82 @@ async def _dispatch_tool_inner(
 
         invalidate_imperator()
         return result
+
+    elif tool_name == "emad_chat":
+        validated = EmadChatInput(**arguments)
+        flow = _get_emad_flow("emad_chat")
+        result = await flow.ainvoke(
+            {
+                "emad_name": validated.emad_name,
+                "conversation_id": validated.conversation_id,
+                "message": validated.message,
+                "instance_row": None,
+                "emad_result": None,
+                "response": None,
+                "rogers_conversation_id": None,
+                "error": None,
+            }
+        )
+        if result.get("error"):
+            raise ValueError(result["error"])
+        return {
+            "response": result["response"],
+            "conversation_id": result.get("rogers_conversation_id")
+            or validated.conversation_id,
+            "emad_name": validated.emad_name,
+        }
+
+    elif tool_name == "emad_install_package":
+        validated = EmadInstallPackageInput(**arguments)
+        flow = _get_emad_flow("emad_install_package")
+        result = await flow.ainvoke(
+            {
+                "package_name": validated.package_name,
+                "version": validated.version,
+                "result": None,
+            }
+        )
+        return result.get("result") or {"status": "error", "detail": "unknown"}
+
+    elif tool_name == "emad_create":
+        validated = EmadCreateInput(**arguments)
+        flow = _get_emad_flow("emad_create")
+        result = await flow.ainvoke(
+            {
+                "emad_name": validated.emad_name,
+                "package_name": validated.package_name,
+                "description": validated.description,
+                "parameters": validated.parameters,
+                "result": None,
+            }
+        )
+        return result.get("result") or {"status": "error"}
+
+    elif tool_name == "emad_update":
+        validated = EmadUpdateInput(**arguments)
+        flow = _get_emad_flow("emad_update")
+        result = await flow.ainvoke(
+            {
+                "emad_name": validated.emad_name,
+                "description": validated.description,
+                "parameters": validated.parameters,
+                "result": None,
+            }
+        )
+        return result.get("result") or {"status": "error"}
+
+    elif tool_name == "emad_delete":
+        validated = EmadDeleteInput(**arguments)
+        flow = _get_emad_flow("emad_delete")
+        result = await flow.ainvoke(
+            {"emad_name": validated.emad_name, "result": None}
+        )
+        return result.get("result") or {"status": "error"}
+
+    elif tool_name == "emad_list":
+        flow = _get_emad_flow("emad_list")
+        result = await flow.ainvoke({"result": None})
+        return result.get("result") or {"emads": []}
 
     else:
         raise ValueError(f"Unknown tool: {tool_name}")

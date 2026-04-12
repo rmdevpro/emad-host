@@ -24,6 +24,7 @@ packages:
   stategraph_packages:
     - context-broker-ae
     - context-broker-te
+    - emad-generic
 
 # ============================================================
 # Tuning Parameters

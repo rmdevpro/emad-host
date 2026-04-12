@@ -105,6 +105,12 @@ async def lifespan(application: FastAPI):
             "until a TE package is installed via install_stategraph."
         )
 
+    # Scan for eMAD packages via entry_points
+    from app.emad_registry import scan as scan_emad_packages
+
+    emad_packages = scan_emad_packages()
+    _log.info("eMAD packages discovered: %d", len(emad_packages))
+
     # REQ-001 §7.4 Fail Fast: Validate build type configs at startup
     for bt_name in config.get("build_types", {}):
         try:

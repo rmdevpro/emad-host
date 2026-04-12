@@ -64,6 +64,45 @@ async def _migration_003(conn) -> None:
     _log.info("Migration 003 complete — alert_instructions table")
 
 
+async def _migration_004(conn) -> None:
+    """Migration 4: Create eMAD registry tables for eMAD hosting.
+
+    Tracks installed eMAD packages and registered eMAD instances.
+    Used by the eMAD management flows (install, create, update, delete, list).
+    Schema derived from Kaiser's eMAD registry (kaiser-postgres/init.sql).
+    """
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS emad_packages (
+            package_name      VARCHAR(100) PRIMARY KEY,
+            installed_version VARCHAR(50)  NOT NULL,
+            installed_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+            status            VARCHAR(20)  NOT NULL DEFAULT 'active'
+                              CHECK (status IN ('active', 'error'))
+        )
+    """)
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS emad_instances (
+            emad_name    VARCHAR(100) PRIMARY KEY,
+            package_name VARCHAR(100) NOT NULL REFERENCES emad_packages(package_name),
+            description  TEXT         NOT NULL DEFAULT '',
+            parameters   JSONB        NOT NULL DEFAULT '{}',
+            status       VARCHAR(20)  NOT NULL DEFAULT 'active'
+                         CHECK (status IN ('active', 'disabled')),
+            created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+            updated_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+        )
+    """)
+    await conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_emad_instances_package
+            ON emad_instances(package_name)
+    """)
+    await conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_emad_instances_status
+            ON emad_instances(status)
+    """)
+    _log.info("Migration 004 complete — emad_packages and emad_instances tables")
+
+
 # Migration registry: version -> (description, migration_function)
 # Add new migrations here. Never modify existing entries.
 # IMPORTANT: This list MUST appear after all _migration_NNN function definitions.
@@ -78,6 +117,11 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
         3,
         "Create alert_instructions table for alerter sidecar tools",
         _migration_003,
+    ),
+    (
+        4,
+        "Create eMAD registry tables for eMAD hosting",
+        _migration_004,
     ),
 ]
 
