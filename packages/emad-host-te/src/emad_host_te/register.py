@@ -2,7 +2,7 @@
 TE — Package registration entry point.
 
 Called by the bootstrap kernel's stategraph_registry.scan() when this
-package is discovered via entry_points(group="context_broker.te").
+package is discovered via entry_points(group="emad_host.te").
 
 Returns a TERegistration dict with the Imperator flow builder and
 identity/purpose declarations.
@@ -18,8 +18,8 @@ def register() -> dict:
     - imperator_builder: callable that builds the compiled Imperator StateGraph
     - initialize: callable(ctx) — AE bootstrap calls this before flow compilation
     """
-    from context_broker_te._ctx import initialize
-    from context_broker_te.imperator_flow import build_imperator_flow
+    from emad_host_te._ctx import initialize
+    from emad_host_te.imperator_flow import build_imperator_flow
 
     return {
         "identity": "Imperator",

@@ -3,7 +3,7 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "context-broker-te"
+name = "emad-host-te"
 version = "0.1.0"
 description = "Context Broker Thought Engine — Imperator cognitive agent"
 requires-python = ">=3.12"
@@ -15,8 +15,8 @@ dependencies = [
     "langchain-openai>=0.2.14",
 ]
 
-[project.entry-points."context_broker.te"]
-context-broker-te = "context_broker_te.register:register"
+[project.entry-points."emad_host.te"]
+emad-host-te = "emad_host_te.register:register"
 
 [tool.setuptools.packages.find]
 where = ["src"]

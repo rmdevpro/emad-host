@@ -14,7 +14,7 @@ from typing import AsyncGenerator
 
 from app.metrics_registry import CHAT_REQUESTS, CHAT_REQUEST_DURATION
 
-_log = logging.getLogger("context_broker.flows.imperator_wrapper")
+_log = logging.getLogger("emad_host.flows.imperator_wrapper")
 
 # Lazy singleton — rebuilt on install_stategraph() or TE config change.
 _imperator_flow = None

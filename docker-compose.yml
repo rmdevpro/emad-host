@@ -9,14 +9,14 @@
 
 services:
 
-  context-broker:
+  emad-host:
     image: nginx:1.28.0-alpine
-    container_name: context-broker
-    hostname: context-broker
+    container_name: emad-host
+    hostname: emad-host
     restart: unless-stopped
     networks:
       - default
-      - context-broker-net
+      - emad-host-net
     ports:
       - "8080:8080"
     volumes:
@@ -28,16 +28,16 @@ services:
       start_period: 60s
       retries: 3
 
-  context-broker-langgraph:
+  emad-host-langgraph:
     build:
       context: .
       dockerfile: Dockerfile
-    image: context-broker-langgraph:latest
-    container_name: context-broker-langgraph
-    hostname: context-broker-langgraph
+    image: emad-host-langgraph:latest
+    container_name: emad-host-langgraph
+    hostname: emad-host-langgraph
     restart: unless-stopped
     networks:
-      - context-broker-net
+      - emad-host-net
     volumes:
       - ./config:/config
       - ./data:/data
@@ -46,10 +46,10 @@ services:
     env_file:
       - ./config/credentials/.env
     environment:
-      - POSTGRES_HOST=context-broker-postgres
+      - POSTGRES_HOST=emad-host-postgres
       - POSTGRES_PORT=5432
-      - POSTGRES_DB=${POSTGRES_DB:-context_broker}
-      - POSTGRES_USER=${POSTGRES_USER:-context_broker}
+      - POSTGRES_DB=${POSTGRES_DB:-emad_host}
+      - POSTGRES_USER=${POSTGRES_USER:-emad_host}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -57,58 +57,58 @@ services:
       start_period: 300s
       retries: 3
 
-  context-broker-postgres:
+  emad-host-postgres:
     image: pgvector/pgvector:pg16
-    container_name: context-broker-postgres
-    hostname: context-broker-postgres
+    container_name: emad-host-postgres
+    hostname: emad-host-postgres
     restart: unless-stopped
     networks:
-      - context-broker-net
+      - emad-host-net
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     env_file:
       - ./config/credentials/.env
     environment:
-      - POSTGRES_DB=${POSTGRES_DB:-context_broker}
-      - POSTGRES_USER=${POSTGRES_USER:-context_broker}
+      - POSTGRES_DB=${POSTGRES_DB:-emad_host}
+      - POSTGRES_USER=${POSTGRES_USER:-emad_host}
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER:-context_broker}", "-d", "${POSTGRES_DB:-context_broker}"]
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER:-emad_host}", "-d", "${POSTGRES_DB:-emad_host}"]
       interval: 30s
       timeout: 10s
       start_period: 30s
       retries: 3
 
   # Log collection for Imperator diagnostics.
-  # Discovers all containers on context-broker-net via Docker API,
+  # Discovers all containers on emad-host-net via Docker API,
   # tails their logs, and writes to Postgres with resolved container names.
-  context-broker-log-shipper:
+  emad-host-log-shipper:
     build:
       context: ./log_shipper
-    container_name: context-broker-log-shipper
-    hostname: context-broker-log-shipper
+    container_name: emad-host-log-shipper
+    hostname: emad-host-log-shipper
     restart: unless-stopped
     networks:
-      - context-broker-net
+      - emad-host-net
     group_add:
       - "${DOCKER_GID:-125}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
-      - POSTGRES_DSN=postgresql://context_broker:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@context-broker-postgres:5432/context_broker
+      - POSTGRES_DSN=postgresql://emad_host:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@emad-host-postgres:5432/emad_host
     env_file:
       - ./config/credentials/.env
 
   # Autoprompter — Dkron scheduler for time-based and event-driven
   # Imperator activation. Fires HTTP callbacks to the langgraph container's
   # dispatcher stategraph. No custom code — OTS image.
-  context-broker-dkron:
+  emad-host-dkron:
     image: dkron/dkron:4.1.0
-    container_name: context-broker-dkron
-    hostname: context-broker-dkron
+    container_name: emad-host-dkron
+    hostname: emad-host-dkron
     restart: unless-stopped
     networks:
-      - context-broker-net
+      - emad-host-net
     volumes:
       - ./data/dkron:/dkron.data
       - ./config/dkron:/config/dkron:ro
@@ -122,30 +122,30 @@ services:
 
   # Gradio Chat UI for the Imperator.
   # Multi-MAD client — connects to any State 4 MAD via standard endpoints.
-  context-broker-ui:
+  emad-host-ui:
     build:
       context: ./ui
-    container_name: context-broker-ui
-    hostname: context-broker-ui
+    container_name: emad-host-ui
+    hostname: emad-host-ui
     restart: unless-stopped
     networks:
-      - context-broker-net
+      - emad-host-net
     volumes:
       - ./ui/config.yml:/app/config.yml:ro
 
   # Alerter webhook relay.
   # Receives CloudEvents webhooks from the Imperator's send_notification tool,
   # optionally formats via LLM, and fans out to Slack/Discord/ntfy/SMTP/webhook.
-  context-broker-alerter:
+  emad-host-alerter:
     build:
       context: ./alerter
-    container_name: context-broker-alerter
-    hostname: context-broker-alerter
+    container_name: emad-host-alerter
+    hostname: emad-host-alerter
     restart: unless-stopped
     networks:
-      - context-broker-net
+      - emad-host-net
     environment:
-      - POSTGRES_DSN=postgresql://context_broker:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@context-broker-postgres:5432/context_broker
+      - POSTGRES_DSN=postgresql://emad_host:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@emad-host-postgres:5432/emad_host
       - ALERTER_CONFIG=/config/alerter.yml
     env_file:
       - ./config/credentials/.env
@@ -153,5 +153,5 @@ services:
       - ./config:/config:ro
 
 networks:
-  context-broker-net:
+  emad-host-net:
     driver: bridge

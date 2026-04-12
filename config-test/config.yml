@@ -27,7 +27,7 @@ embeddings:
 # Reranker: local Infinity (same for all tiers)
 reranker:
   provider: api
-  base_url: http://context-broker-infinity:7997
+  base_url: http://emad-host-infinity:7997
   model: mixedbread-ai/mxbai-rerank-xsmall-v1
   top_n: 10
 
@@ -77,8 +77,8 @@ packages:
   local_path: /app/packages
   devpi_url: null
   stategraph_packages:
-    - context-broker-ae
-    - context-broker-te
+    - emad-host-ae
+    - emad-host-te
 
 tuning:
   verbose_logging: true

@@ -9,9 +9,9 @@ import logging
 import asyncpg
 from langchain_core.tools import tool
 
-from context_broker_te._ctx import get_ctx
+from emad_host_te._ctx import get_ctx
 
-_log = logging.getLogger("context_broker.tools.operational")
+_log = logging.getLogger("emad_host.tools.operational")
 
 
 @tool
@@ -111,7 +111,7 @@ async def extract_domain_knowledge(content: str = "") -> str:
     try:
         ctx = get_ctx()
         config = await ctx.async_load_config()
-        from context_broker_te.domain_mem0 import get_domain_mem0
+        from emad_host_te.domain_mem0 import get_domain_mem0
 
         mem0 = await get_domain_mem0(config)
         if mem0 is None:
@@ -195,7 +195,7 @@ async def search_domain_knowledge(query: str, limit: int = 5) -> str:
     try:
         ctx = get_ctx()
         config = await ctx.async_load_config()
-        from context_broker_te.domain_mem0 import get_domain_mem0
+        from emad_host_te.domain_mem0 import get_domain_mem0
 
         mem0 = await get_domain_mem0(config)
         if mem0 is None:

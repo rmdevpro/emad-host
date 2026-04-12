@@ -12,7 +12,7 @@ from langgraph.graph import END, StateGraph
 from prometheus_client import generate_latest, REGISTRY
 from typing_extensions import TypedDict
 
-_log = logging.getLogger("context_broker.flows.metrics")
+_log = logging.getLogger("emad_host.flows.metrics")
 
 
 class MetricsState(TypedDict):

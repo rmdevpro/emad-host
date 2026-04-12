@@ -13,7 +13,7 @@ import asyncpg
 
 from app.database import get_pg_pool
 
-_log = logging.getLogger("context_broker.migrations")
+_log = logging.getLogger("emad_host.migrations")
 
 
 async def _migration_001(conn) -> None:

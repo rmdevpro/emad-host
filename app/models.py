@@ -89,7 +89,7 @@ class ChatMessage(BaseModel):
 class ChatCompletionRequest(BaseModel):
     """OpenAI-compatible /v1/chat/completions request body."""
 
-    model: str = Field(default="context-broker")
+    model: str = Field(default="emad-host")
     messages: list[ChatMessage] = Field(..., min_length=1)
     stream: bool = False
     temperature: Optional[float] = Field(None, ge=0.0, le=2.0)

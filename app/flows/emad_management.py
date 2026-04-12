@@ -25,7 +25,7 @@ from langgraph.graph import END, StateGraph
 from app import emad_registry
 from app.database import get_pg_pool
 
-_log = logging.getLogger("context_broker.flows.emad_management")
+_log = logging.getLogger("emad_host.flows.emad_management")
 
 
 # ---------------------------------------------------------------------------

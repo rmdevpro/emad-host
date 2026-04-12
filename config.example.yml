@@ -22,8 +22,8 @@ packages:
   local_path: /app/packages
   devpi_url: null
   stategraph_packages:
-    - context-broker-ae
-    - context-broker-te
+    - emad-host-ae
+    - emad-host-te
     - emad-generic
 
 # ============================================================

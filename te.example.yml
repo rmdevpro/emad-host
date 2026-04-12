@@ -22,4 +22,4 @@ imperator:
 # trim_messages for context management (no cross-session persistence).
 
 # context_broker:
-#   url: http://context-broker:8080
+#   url: http://emad-host:8080

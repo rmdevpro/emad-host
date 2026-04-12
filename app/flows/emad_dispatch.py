@@ -21,7 +21,7 @@ from langgraph.graph import END, StateGraph
 from app import emad_registry
 from app.database import get_pg_pool
 
-_log = logging.getLogger("context_broker.flows.emad_dispatch")
+_log = logging.getLogger("emad_host.flows.emad_dispatch")
 
 # Coordinated with nginx proxy_read_timeout
 _INVOKE_TIMEOUT = 1800.0

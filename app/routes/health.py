@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from app.config import async_load_config
 from app.stategraph_registry import get_flow_builder
 
-_log = logging.getLogger("context_broker.routes.health")
+_log = logging.getLogger("emad_host.routes.health")
 
 router = APIRouter()
 

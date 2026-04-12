@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 
 from app.stategraph_registry import get_flow_builder
 
-_log = logging.getLogger("context_broker.routes.autoprompt")
+_log = logging.getLogger("emad_host.routes.autoprompt")
 
 router = APIRouter()
 
@@ -54,7 +54,7 @@ async def autoprompt_callback(request: Request) -> JSONResponse:
     runbook_path = body.get("runbook_path", "")
     target_url = body.get(
         "target_url",
-        "http://context-broker-langgraph:8000/v1/chat/completions",
+        "http://emad-host-langgraph:8000/v1/chat/completions",
     )
 
     if not runbook_path:

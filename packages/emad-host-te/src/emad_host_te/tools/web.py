@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 
 from langchain_core.tools import tool
 
-_log = logging.getLogger("context_broker.tools.web")
+_log = logging.getLogger("emad_host.tools.web")
 
 
 @tool

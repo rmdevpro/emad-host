@@ -23,7 +23,7 @@ from app.models import (
     MetricsGetInput,
 )
 
-_log = logging.getLogger("context_broker.flows.tool_dispatch")
+_log = logging.getLogger("emad_host.flows.tool_dispatch")
 
 # Lazy-initialized flow singletons — compiled on first use from
 # dynamically loaded packages via the stategraph_registry.

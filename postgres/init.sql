@@ -24,7 +24,7 @@ ON CONFLICT (version) DO NOTHING;
 -- System logs (log shipper container writes here)
 -- Enables Imperator to query logs from all MAD containers.
 -- The log shipper discovers containers via Docker API on
--- context-broker-net and writes their logs with resolved names.
+-- emad-host-net and writes their logs with resolved names.
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS system_logs (

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from langchain_core.tools import tool
 
-_log = logging.getLogger("context_broker.tools.filesystem")
+_log = logging.getLogger("emad_host.tools.filesystem")
 
 # Allowed read roots — the Imperator can inspect its own code and config
 _READ_ROOTS = ["/app", "/config", "/data"]
@@ -191,7 +191,7 @@ async def file_write(path: str, content: str) -> str:
 
 def _sync_read_system_prompt() -> str:
     """Synchronous system prompt read helper."""
-    from context_broker_te._ctx import get_ctx
+    from emad_host_te._ctx import get_ctx
 
     config = get_ctx().load_merged_config()
     prompt_name = config.get("imperator", {}).get("system_prompt", "imperator_identity")
@@ -217,7 +217,7 @@ async def read_system_prompt() -> str:
 
 def _sync_update_system_prompt(content: str) -> str:
     """Synchronous system prompt update helper."""
-    from context_broker_te._ctx import get_ctx
+    from emad_host_te._ctx import get_ctx
 
     config = get_ctx().load_merged_config()
     prompt_name = config.get("imperator", {}).get("system_prompt", "imperator_identity")

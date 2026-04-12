@@ -2,13 +2,13 @@
 
 # LLM for formatting alerts
 llm:
-  base_url: http://context-broker-ollama:11434/v1
+  base_url: http://emad-host-ollama:11434/v1
   model: qwen2.5:7b
   api_key_env: ""
 
 # Embeddings for instruction search
 embeddings:
-  base_url: http://context-broker-infinity:7997
+  base_url: http://emad-host-infinity:7997
   model: nomic-ai/nomic-embed-text-v1.5
   api_key_env: ""
 

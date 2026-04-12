@@ -11,7 +11,7 @@ from typing import Optional
 from langgraph.graph import END, StateGraph
 from typing_extensions import TypedDict
 
-_log = logging.getLogger("context_broker.flows.health")
+_log = logging.getLogger("emad_host.flows.health")
 
 
 class HealthCheckState(TypedDict):

@@ -51,11 +51,11 @@ packages:
   local_path: /app/packages
   source: local
   stategraph_packages:
-  - context-broker-ae
-  - context-broker-te
+  - emad-host-ae
+  - emad-host-te
   - emad-generic
 reranker:
-  base_url: http://context-broker-infinity:7997
+  base_url: http://emad-host-infinity:7997
   model: mixedbread-ai/mxbai-rerank-xsmall-v1
   provider: api
   top_n: 10

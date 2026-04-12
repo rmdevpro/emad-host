@@ -4,7 +4,7 @@ Imperator — LangGraph ReAct-style conversational agent flow.
 The Imperator is the pMAD's built-in conversational agent.
 It uses a proper LangGraph ReAct graph (agent_node -> tool_node loop).
 
-Supports two modes controlled by context_broker config in te.yml:
+Supports two modes controlled by emad_host config in te.yml:
 - CB mode: loads context via external Context Broker (get_context, store_message, CEAc)
 - No-CB mode: uses LangGraph trim_messages for context window management
 
@@ -27,18 +27,18 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 from typing_extensions import TypedDict
 
-from context_broker_te._ctx import get_ctx
+from emad_host_te._ctx import get_ctx
 
-from context_broker_te.tools.admin import get_tools as get_admin_tools
-from context_broker_te.tools.alerting import get_tools as get_alerting_tools
-from context_broker_te.tools.diagnostic import get_tools as get_diagnostic_tools
-from context_broker_te.tools.filesystem import get_tools as get_filesystem_tools
-from context_broker_te.tools.notify import get_tools as get_notify_tools
-from context_broker_te.tools.operational import get_tools as get_operational_tools
-from context_broker_te.tools.system import get_tools as get_system_tools
-from context_broker_te.tools.web import get_tools as get_web_tools
+from emad_host_te.tools.admin import get_tools as get_admin_tools
+from emad_host_te.tools.alerting import get_tools as get_alerting_tools
+from emad_host_te.tools.diagnostic import get_tools as get_diagnostic_tools
+from emad_host_te.tools.filesystem import get_tools as get_filesystem_tools
+from emad_host_te.tools.notify import get_tools as get_notify_tools
+from emad_host_te.tools.operational import get_tools as get_operational_tools
+from emad_host_te.tools.system import get_tools as get_system_tools
+from emad_host_te.tools.web import get_tools as get_web_tools
 
-_log = logging.getLogger("context_broker.flows.imperator")
+_log = logging.getLogger("emad_host.flows.imperator")
 
 # MAD identity — hostname is the Docker container name
 _MAD_HOSTNAME = socket.gethostname()

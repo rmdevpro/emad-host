@@ -16,7 +16,7 @@ import httpx
 from langgraph.graph import END, StateGraph
 from typing_extensions import TypedDict
 
-_log = logging.getLogger("context_broker.flows.autoprompt_dispatcher")
+_log = logging.getLogger("emad_host.flows.autoprompt_dispatcher")
 
 RUNBOOK_DIR = Path("/config/runbooks")
 
@@ -56,10 +56,10 @@ async def deliver_prompt(state: DispatcherState) -> dict:
         return {}
 
     content = state.get("runbook_content", "")
-    target_url = state.get("target_url", "http://context-broker-langgraph:8000/v1/chat/completions")
+    target_url = state.get("target_url", "http://emad-host-langgraph:8000/v1/chat/completions")
 
     payload = {
-        "model": "context-broker",
+        "model": "emad-host",
         "messages": [
             {"role": "user", "content": content},
         ],

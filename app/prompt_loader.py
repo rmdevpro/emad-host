@@ -10,7 +10,7 @@ import logging
 import os
 from pathlib import Path
 
-_log = logging.getLogger("context_broker.prompt_loader")
+_log = logging.getLogger("emad_host.prompt_loader")
 
 PROMPTS_DIR = Path(os.environ.get("PROMPTS_DIR", "/config/prompts"))
 

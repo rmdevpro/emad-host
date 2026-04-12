@@ -2,7 +2,7 @@
 
 The webhook URL is configured in te.yml under imperator.notification_webhook.
 
-Default: http://context-broker-alerter:8000/webhook (the alerter sidecar).
+Default: http://emad-host-alerter:8000/webhook (the alerter sidecar).
 The alerter routes, formats via LLM, and fans out to Slack/Discord/ntfy/SMTP.
 
 Alternative: point directly at an external service (ntfy.sh, Slack) to
@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 
 from langchain_core.tools import tool
 
-_log = logging.getLogger("context_broker.tools.notify")
+_log = logging.getLogger("emad_host.tools.notify")
 
 @tool
 async def send_notification(
@@ -44,12 +44,12 @@ async def send_notification(
         title: Optional short title for the notification.
     """
     try:
-        from context_broker_te._ctx import get_ctx
+        from emad_host_te._ctx import get_ctx
 
         loop = asyncio.get_running_loop()
         config = await loop.run_in_executor(None, get_ctx().load_merged_config)
         webhook_url = config.get("imperator", {}).get(
-            "notification_webhook", "http://context-broker-alerter:8000/webhook"
+            "notification_webhook", "http://emad-host-alerter:8000/webhook"
         )
 
         import httpx

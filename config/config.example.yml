@@ -33,7 +33,7 @@ log_level: INFO
 #
 # Local (default): Ollama qwen2.5:7b — no API key needed
 summarization:
-  base_url: http://context-broker-ollama:11434/v1
+  base_url: http://emad-host-ollama:11434/v1
   model: qwen2.5:7b
   # api_key_env: GOOGLE_API_KEY
 
@@ -53,7 +53,7 @@ summarization:
 # NOTE: Gemini and Anthropic do NOT support JSON mode via OpenAI-compat endpoint.
 #       Use OpenAI, xAI, or Ollama for extraction.
 extraction:
-  base_url: http://context-broker-ollama:11434/v1
+  base_url: http://emad-host-ollama:11434/v1
   model: qwen2.5:7b
   # api_key_env: OPENAI_API_KEY
 
@@ -75,7 +75,7 @@ extraction:
 #
 # Local (default): Infinity nomic-ai/nomic-embed-text-v1.5 (768 dims, no MRL)
 embeddings:
-  base_url: http://context-broker-infinity:7997
+  base_url: http://emad-host-infinity:7997
   model: nomic-ai/nomic-embed-text-v1.5
   embedding_dims: 768
   tiktoken_enabled: false
@@ -85,7 +85,7 @@ embeddings:
 # Local Infinity works for all tiers — no reason to use cloud for reranking
 reranker:
   provider: api
-  base_url: http://context-broker-infinity:7997
+  base_url: http://emad-host-infinity:7997
   model: mixedbread-ai/mxbai-rerank-xsmall-v1
   top_n: 10
 
@@ -106,7 +106,7 @@ reranker:
 #
 # Local (default): Ollama nomic-embed-text (768 dims, no MRL)
 # log_embeddings:
-#   base_url: http://context-broker-ollama:11434/v1
+#   base_url: http://emad-host-ollama:11434/v1
 #   model: nomic-embed-text
 #   embedding_dims: 768
 #   api_key_env: ""
@@ -154,8 +154,8 @@ packages:
   local_path: /app/packages
   devpi_url: null
   stategraph_packages:             # REQ-001 §10: packages installed at startup
-    - context-broker-ae
-    - context-broker-te
+    - emad-host-ae
+    - emad-host-te
 
 # ============================================================
 # Tuning Parameters (AE pipeline behavior)

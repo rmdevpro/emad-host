@@ -12,9 +12,9 @@ import asyncpg
 
 from langchain_core.tools import tool
 
-from context_broker_te._ctx import get_ctx
+from emad_host_te._ctx import get_ctx
 
-_log = logging.getLogger("context_broker.tools.alerting")
+_log = logging.getLogger("emad_host.tools.alerting")
 
 
 @tool

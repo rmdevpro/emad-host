@@ -3,8 +3,8 @@ port: 7860
 
 mads:
   - name: Context Broker
-    url: http://context-broker-langgraph:8000
-    hostname: context-broker-langgraph
+    url: http://emad-host-langgraph:8000
+    hostname: emad-host-langgraph
 
 # Health poll interval in seconds
 health_poll_interval: 30

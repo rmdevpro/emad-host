@@ -14,7 +14,7 @@ from typing import Optional
 import asyncpg
 import httpx
 
-_log = logging.getLogger("context_broker.database")
+_log = logging.getLogger("emad_host.database")
 
 _pg_pool: Optional[asyncpg.Pool] = None
 
@@ -32,10 +32,10 @@ async def init_postgres(config: dict) -> asyncpg.Pool:
     password = os.environ.get("POSTGRES_PASSWORD", "")
 
     _pg_pool = await asyncpg.create_pool(
-        host=os.environ.get("POSTGRES_HOST", "context-broker-postgres"),
+        host=os.environ.get("POSTGRES_HOST", "emad-host-postgres"),
         port=int(os.environ.get("POSTGRES_PORT", "5432")),
-        database=os.environ.get("POSTGRES_DB", "context_broker"),
-        user=os.environ.get("POSTGRES_USER", "context_broker"),
+        database=os.environ.get("POSTGRES_DB", "emad_host"),
+        user=os.environ.get("POSTGRES_USER", "emad_host"),
         password=password,
         min_size=db_config.get("pool_min_size", 2),
         max_size=db_config.get("pool_max_size", 10),
@@ -81,7 +81,7 @@ async def check_neo4j_health(config: dict | None = None) -> bool:
 
     Probes the HTTP endpoint (port 7474) — Neo4j's built-in health endpoint.
     """
-    neo4j_host = os.environ.get("NEO4J_HOST", "context-broker-neo4j")
+    neo4j_host = os.environ.get("NEO4J_HOST", "emad-host-neo4j")
     neo4j_http_port = os.environ.get("NEO4J_HTTP_PORT", "7474")
     url = f"http://{neo4j_host}:{neo4j_http_port}/"
 

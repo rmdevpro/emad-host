@@ -13,7 +13,7 @@ from prometheus_client import CONTENT_TYPE_LATEST
 
 from app.stategraph_registry import get_flow_builder
 
-_log = logging.getLogger("context_broker.routes.metrics")
+_log = logging.getLogger("emad_host.routes.metrics")
 
 router = APIRouter()
 

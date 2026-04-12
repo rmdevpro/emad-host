@@ -61,7 +61,7 @@ def setup_logging() -> None:
     for noisy_logger in ("uvicorn.access", "httpx", "httpcore"):
         logging.getLogger(noisy_logger).setLevel(logging.WARNING)
 
-    logging.getLogger("context_broker").setLevel(logging.INFO)
+    logging.getLogger("emad_host").setLevel(logging.INFO)
 
 
 def update_log_level(level: str) -> None:
@@ -72,10 +72,10 @@ def update_log_level(level: str) -> None:
     """
     numeric_level = getattr(logging, level.upper(), None)
     if not isinstance(numeric_level, int):
-        logging.getLogger("context_broker").warning(
+        logging.getLogger("emad_host").warning(
             "Invalid log level '%s' in config — keeping INFO", level
         )
         return
 
     logging.getLogger().setLevel(numeric_level)
-    logging.getLogger("context_broker").setLevel(numeric_level)
+    logging.getLogger("emad_host").setLevel(numeric_level)

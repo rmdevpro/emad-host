@@ -1,11 +1,11 @@
-# context-broker-langgraph — Application container
+# emad-host-langgraph — Application container
 # All LangGraph flows, queue workers, Imperator, and ASGI server.
 #
 # Build context: project root (.)
 
 FROM python:3.12.10-slim
 
-ARG USER_NAME=context-broker
+ARG USER_NAME=emad-host
 ARG USER_UID=1000
 ARG USER_GID=1000
 
@@ -57,12 +57,12 @@ RUN chmod +x ./entrypoint.sh
 # REQ-001 §10: Copy and pre-build StateGraph packages as wheels.
 # Built to /app/stategraph-wheels/ (not /app/packages/ which may be volume-mounted).
 # entrypoint.sh installs them at startup via pip install --user --no-deps.
-COPY --chown=${USER_NAME}:${USER_NAME} packages/context-broker-ae/ ./sg-src/context-broker-ae/
-COPY --chown=${USER_NAME}:${USER_NAME} packages/context-broker-te/ ./sg-src/context-broker-te/
+COPY --chown=${USER_NAME}:${USER_NAME} packages/emad-host-ae/ ./sg-src/emad-host-ae/
+COPY --chown=${USER_NAME}:${USER_NAME} packages/emad-host-te/ ./sg-src/emad-host-te/
 COPY --chown=${USER_NAME}:${USER_NAME} packages/emad-generic/ ./sg-src/emad-generic/
 RUN mkdir -p ./stategraph-wheels && \
-    pip wheel --no-deps -w ./stategraph-wheels/ ./sg-src/context-broker-ae/ && \
-    pip wheel --no-deps -w ./stategraph-wheels/ ./sg-src/context-broker-te/ && \
+    pip wheel --no-deps -w ./stategraph-wheels/ ./sg-src/emad-host-ae/ && \
+    pip wheel --no-deps -w ./stategraph-wheels/ ./sg-src/emad-host-te/ && \
     pip wheel --no-deps -w ./stategraph-wheels/ ./sg-src/emad-generic/ && \
     rm -rf ./sg-src
 

@@ -20,7 +20,7 @@ from typing import Callable
 
 from langgraph.graph import StateGraph
 
-_log = logging.getLogger("context_broker.emad_registry")
+_log = logging.getLogger("emad_host.emad_registry")
 
 # package_name -> build_graph callable
 _registry: dict[str, Callable[[dict], StateGraph]] = {}

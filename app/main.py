@@ -24,7 +24,7 @@ from app.routes import autoprompt, chat, health, mcp, metrics
 from app.imperator.state_manager import ImperatorStateManager
 
 setup_logging()
-_log = logging.getLogger("context_broker.main")
+_log = logging.getLogger("emad_host.main")
 
 
 async def _postgres_retry_loop(application: FastAPI, config: dict) -> None:

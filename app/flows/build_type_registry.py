@@ -19,7 +19,7 @@ import logging
 import threading
 from typing import Any, Callable
 
-_log = logging.getLogger("context_broker.flows.build_type_registry")
+_log = logging.getLogger("emad_host.flows.build_type_registry")
 
 # R5-m2: Lock for thread-safe registration and lazy compilation.
 _lock = threading.Lock()

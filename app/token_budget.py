@@ -16,7 +16,7 @@ import httpx
 
 from app.config import get_api_key
 
-_log = logging.getLogger("context_broker.token_budget")
+_log = logging.getLogger("emad_host.token_budget")
 
 
 async def resolve_token_budget(

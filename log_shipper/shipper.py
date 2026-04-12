@@ -75,10 +75,10 @@ class LogShipper:
             logger.warning(
                 "Could not determine own container ID from HOSTNAME. Trying network discovery fallback."
             )
-            # Fallback: Find the context-broker-net network by name
+            # Fallback: Find the emad-host-net network by name
             networks = await self.docker.networks.list()
             for net in networks:
-                if "context-broker-net" in net["Name"]:
+                if "emad-host-net" in net["Name"]:
                     self.network_id = net["Id"]
                     logger.info(
                         "Discovered network by name: %s (%s)", net['Name'], self.network_id[:12]
@@ -90,7 +90,7 @@ class LogShipper:
                 networks = my_container["NetworkSettings"]["Networks"]
                 if not networks:
                     raise ValueError("Container is not attached to any networks")
-                # Assume the first network is the primary internal one (context-broker-net)
+                # Assume the first network is the primary internal one (emad-host-net)
                 network_name = list(networks.keys())[0]
                 self.network_id = networks[network_name]["NetworkID"]
                 logger.info(
@@ -133,7 +133,7 @@ class LogShipper:
             name = container["Name"].lstrip("/")
 
             # Don't tail ourselves to avoid an infinite loop of logging our own inserts
-            if name == "context-broker-log-shipper":
+            if name == "emad-host-log-shipper":
                 return
 
             logger.info("Starting tail for container: %s (%s)", name, container_id[:12])

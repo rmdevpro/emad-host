@@ -4,7 +4,7 @@ Imperator persistent state manager.
 Manages the Imperator's conversation_id across restarts.
 Reads/writes /data/imperator_state.json.
 
-In CB mode (context_broker.url configured): creates conversations on the
+In CB mode (emad_host.url configured): creates conversations on the
 remote Context Broker and tracks the conversation_id locally.
 In no-CB mode: no conversation tracking needed — returns None.
 """
@@ -18,7 +18,7 @@ from typing import Optional
 
 import httpx
 
-_log = logging.getLogger("context_broker.imperator.state_manager")
+_log = logging.getLogger("emad_host.imperator.state_manager")
 
 IMPERATOR_STATE_FILE = Path("/data/imperator_state.json")
 

@@ -6,8 +6,8 @@ Follows the Kaiser pattern: importlib.metadata for discovery,
 sys.modules eviction for hot-reload without container restart.
 
 Entry point groups:
-  - context_broker.ae: AE packages (infrastructure StateGraphs)
-  - context_broker.te: TE packages (cognitive StateGraphs — Imperator)
+  - emad_host.ae: AE packages (infrastructure StateGraphs)
+  - emad_host.te: TE packages (cognitive StateGraphs — Imperator)
 """
 
 import importlib
@@ -17,7 +17,7 @@ import sys
 import threading
 from typing import Callable
 
-_log = logging.getLogger("context_broker.stategraph_registry")
+_log = logging.getLogger("emad_host.stategraph_registry")
 _lock = threading.Lock()
 
 # Registry state
@@ -53,7 +53,7 @@ def scan() -> dict[str, list[str]]:
     discovered: dict[str, list[str]] = {"ae": [], "te": []}
 
     # Step 2: Discover AE packages
-    for ep in importlib.metadata.entry_points(group="context_broker.ae"):
+    for ep in importlib.metadata.entry_points(group="emad_host.ae"):
         try:
             register_fn = ep.load()
             registration = register_fn()
@@ -84,14 +84,14 @@ def scan() -> dict[str, list[str]]:
             _log.error("Failed to load AE entry point '%s': %s", ep.name, exc)
 
     # Step 3: Discover TE packages
-    for ep in importlib.metadata.entry_points(group="context_broker.te"):
+    for ep in importlib.metadata.entry_points(group="emad_host.te"):
         try:
             register_fn = ep.load()
             registration = register_fn()
             # TE/AE decoupling: inject KernelTEContext before flow compilation
             init_fn = registration.get("initialize")
             if init_fn is not None:
-                from context_broker_te._kernel_ctx import KernelTEContext
+                from emad_host_te._kernel_ctx import KernelTEContext
 
                 init_fn(KernelTEContext())
                 _log.info("Injected KernelTEContext into TE package: %s", ep.name)
