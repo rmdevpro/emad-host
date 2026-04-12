@@ -405,7 +405,7 @@ async def _list_emads_node(state: ListEmadsState) -> ListEmadsState:
                 "package_name": row["package_name"],
                 "version": row["installed_version"] or "unknown",
                 "description": row["description"],
-                "parameters": dict(row["parameters"]) if row["parameters"] else {},
+                "parameters": json.loads(row["parameters"]) if isinstance(row["parameters"], str) else (dict(row["parameters"]) if row["parameters"] else {}),
                 "status": row["status"] if pkg_loaded else "error",
             }
         )

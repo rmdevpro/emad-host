@@ -85,7 +85,9 @@ async def build_and_invoke(state: EmadChatState) -> EmadChatState:
     """
     row = state["instance_row"]
     package_name = row["package_name"]
-    parameters = dict(row["parameters"]) if row["parameters"] else {}
+    import json as _json
+
+    parameters = _json.loads(row["parameters"]) if isinstance(row["parameters"], str) else (dict(row["parameters"]) if row["parameters"] else {})
 
     build_func = emad_registry.get_build_func(package_name)
 
