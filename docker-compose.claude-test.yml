@@ -53,7 +53,6 @@ services:
     volumes:
       - ./config-test:/config
       - ./data-test:/data
-      - ./packages:/app/packages:ro
     env_file:
       - ./config/credentials/.env
     environment:

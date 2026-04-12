@@ -337,7 +337,7 @@ async def _handle_emad_request(
     and returns the response in OpenAI-compatible format. Supports streaming
     via astream_events (same pattern as kaiser-langgraph/server.py).
     """
-    from app import emad_registry
+    from app import package_registry
 
     model = emad_instance["emad_name"]
     package_name = emad_instance["package_name"]
@@ -349,7 +349,7 @@ async def _handle_emad_request(
     else:
         parameters = {}
 
-    build_func = emad_registry.get_build_func(package_name)
+    build_func = package_registry.get_build_func(package_name)
     if build_func is None:
         return JSONResponse(
             status_code=500,

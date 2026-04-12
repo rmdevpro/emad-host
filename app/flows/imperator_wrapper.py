@@ -1,7 +1,7 @@
 """
 Imperator flow wrapper — kernel-side metrics and lifecycle management.
 
-Looks up the TE's Imperator from the stategraph_registry and invokes
+Looks up the TE's Imperator from the package_registry and invokes
 it with metrics recording. This is the kernel's interface to the TE.
 
 Per REQ-001 §6.4: metrics produced inside the flow layer, not route handlers.
@@ -43,7 +43,7 @@ def _get_flow():
         _imperator_flow = None
 
     if _imperator_flow is None:
-        from app.stategraph_registry import get_imperator_builder
+        from app.package_registry import get_imperator_builder
 
         builder = get_imperator_builder()
         if builder is None:

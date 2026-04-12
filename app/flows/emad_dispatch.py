@@ -7,7 +7,7 @@ Looks up a named eMAD instance in Postgres, builds its StateGraph from
 the registered package, invokes it, and extracts the response.
 
 Adapted from kaiser-langgraph/flows/dispatch.py for the emad-host template.
-Uses app.database for DB access, app.emad_registry for package lookup.
+Uses app.database for DB access, app.package_registry for package lookup.
 """
 
 import asyncio
@@ -18,7 +18,7 @@ import asyncpg
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, StateGraph
 
-from app import emad_registry
+from app import package_registry
 from app.database import get_pg_pool
 
 _log = logging.getLogger("emad_host.flows.emad_dispatch")
@@ -67,7 +67,7 @@ async def lookup_instance(state: EmadChatState) -> EmadChatState:
         return {**state, "error": f"EMAD_DISABLED: {emad_name}"}
 
     package_name = row["package_name"]
-    if emad_registry.get_build_func(package_name) is None:
+    if package_registry.get_build_func(package_name) is None:
         return {
             **state,
             "error": f"PACKAGE_NOT_LOADED: {package_name} — "
@@ -89,7 +89,7 @@ async def build_and_invoke(state: EmadChatState) -> EmadChatState:
 
     parameters = _json.loads(row["parameters"]) if isinstance(row["parameters"], str) else (dict(row["parameters"]) if row["parameters"] else {})
 
-    build_func = emad_registry.get_build_func(package_name)
+    build_func = package_registry.get_build_func(package_name)
 
     # Validate host contract: build_graph must return a compiled StateGraph
     try:

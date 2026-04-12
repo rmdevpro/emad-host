@@ -89,27 +89,21 @@ async def lifespan(application: FastAPI):
     configured_level = config.get("log_level", "INFO")
     update_log_level(configured_level)
 
-    # REQ-001 §10.2: Scan for StateGraph packages via entry_points
-    from app.stategraph_registry import scan as scan_stategraph_packages
+    # Load AE and TE packages from config (convention-based, no entry_points)
+    from app.package_registry import scan_from_config
 
-    discovered = scan_stategraph_packages()
-    _log.info("StateGraph packages discovered: %s", discovered)
+    discovered = scan_from_config(config)
+    _log.info("Packages loaded: %s", discovered)
     if not discovered.get("ae"):
         _log.warning(
-            "No AE packages found. Infrastructure flows will not be available "
-            "until an AE package is installed via install_stategraph."
+            "No AE package loaded. Infrastructure flows will not be available "
+            "until an AE package is installed via install_package."
         )
     if not discovered.get("te"):
         _log.warning(
-            "No TE packages found. The Imperator will not be available "
-            "until a TE package is installed via install_stategraph."
+            "No TE package loaded. The Imperator will not be available "
+            "until a TE package is installed via install_package."
         )
-
-    # Scan for eMAD packages via entry_points
-    from app.emad_registry import scan as scan_emad_packages
-
-    emad_packages = scan_emad_packages()
-    _log.info("eMAD packages discovered: %d", len(emad_packages))
 
     # REQ-001 §7.4 Fail Fast: Validate build type configs at startup
     for bt_name in config.get("build_types", {}):

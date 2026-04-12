@@ -11,7 +11,7 @@ from fastapi import APIRouter
 from fastapi.responses import Response
 from prometheus_client import CONTENT_TYPE_LATEST
 
-from app.stategraph_registry import get_flow_builder
+from app.package_registry import get_flow_builder
 
 _log = logging.getLogger("emad_host.routes.metrics")
 

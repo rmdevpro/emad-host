@@ -4,7 +4,7 @@ Tool dispatch — routes MCP tool calls to compiled StateGraph flows.
 All tool logic lives in StateGraph flows loaded dynamically from AE/TE
 packages via entry_points (REQ-001 §10). This module is the thin
 kernel-side routing layer that maps tool names to their flows using
-the stategraph_registry.
+the package_registry.
 """
 
 import logging
@@ -12,7 +12,7 @@ import time
 from typing import Any
 
 from app.metrics_registry import MCP_REQUESTS, MCP_REQUEST_DURATION
-from app.stategraph_registry import get_flow_builder, get_imperator_builder
+from app.package_registry import get_flow_builder, get_imperator_builder
 from app.models import (
     EmadChatInput,
     EmadCreateInput,
@@ -26,7 +26,7 @@ from app.models import (
 _log = logging.getLogger("emad_host.flows.tool_dispatch")
 
 # Lazy-initialized flow singletons — compiled on first use from
-# dynamically loaded packages via the stategraph_registry.
+# dynamically loaded packages via the package_registry.
 _flow_cache: dict[str, Any] = {}
 
 

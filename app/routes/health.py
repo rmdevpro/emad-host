@@ -12,7 +12,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app.config import async_load_config
-from app.stategraph_registry import get_flow_builder
+from app.package_registry import get_flow_builder
 
 _log = logging.getLogger("emad_host.routes.health")
 

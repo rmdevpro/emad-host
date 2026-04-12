@@ -9,7 +9,7 @@ Single-node programmatic StateGraphs for:
   - emad_list
 
 Adapted from kaiser-langgraph/flows/management.py for the emad-host template.
-Uses app.database for DB access, app.emad_registry for package lookup,
+Uses app.database for DB access, app.package_registry for package lookup,
 app.config for package source settings.
 """
 
@@ -23,7 +23,7 @@ from typing import TypedDict
 import asyncpg
 from langgraph.graph import END, StateGraph
 
-from app import emad_registry
+from app import package_registry
 from app.database import get_pg_pool
 
 _log = logging.getLogger("emad_host.flows.emad_management")
@@ -52,7 +52,7 @@ async def _install_package_node(state: InstallPackageState) -> InstallPackageSta
     try:
         installed = importlib.metadata.version(pkg)
         if ver is None or installed == ver:
-            emad_registry.scan()
+            package_registry.load_emad(pkg)
             # Ensure DB record exists even if package was pre-installed at build time
             try:
                 pool = get_pg_pool()
@@ -166,7 +166,7 @@ async def _install_package_node(state: InstallPackageState) -> InstallPackageSta
         shutil.rmtree(f"/tmp/emad-install-{pkg}", ignore_errors=True)
 
     # Rescan registry to pick up new package
-    emad_registry.scan()
+    package_registry.load_emad(pkg)
 
     try:
         installed_version = importlib.metadata.version(pkg)
@@ -227,7 +227,7 @@ async def _create_emad_node(state: CreateEmadState) -> CreateEmadState:
     emad_name = state["emad_name"]
     package_name = state["package_name"]
 
-    if emad_registry.get_build_func(package_name) is None:
+    if package_registry.get_build_func(package_name) is None:
         return {
             **state,
             "result": {
@@ -398,7 +398,7 @@ async def _list_emads_node(state: ListEmadsState) -> ListEmadsState:
 
     emads = []
     for row in rows:
-        pkg_loaded = emad_registry.get_build_func(row["package_name"]) is not None
+        pkg_loaded = package_registry.get_build_func(row["package_name"]) is not None
         emads.append(
             {
                 "emad_name": row["emad_name"],

@@ -51,7 +51,7 @@ class TEOutputState(TypedDict, total=False):
 class TERegistration(TypedDict, total=False):
     """Registration dict returned by a TE package's entry point.
 
-    The kernel's stategraph_registry.scan() processes this to
+    The kernel's package_registry.scan() processes this to
     register the Imperator builder and any tools the TE requires.
     """
 
@@ -67,7 +67,7 @@ class TERegistration(TypedDict, total=False):
 class AERegistration(TypedDict, total=False):
     """Registration dict returned by an AE package's entry point.
 
-    The kernel's stategraph_registry.scan() processes this to
+    The kernel's package_registry.scan() processes this to
     register build types and flow builders in the appropriate registries.
     """
 

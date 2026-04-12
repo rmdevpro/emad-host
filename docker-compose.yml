@@ -41,7 +41,6 @@ services:
     volumes:
       - ./config:/config
       - ./data:/data
-      - ./packages:/app/packages:ro
       - ./config/runbooks:/config/runbooks:ro
     env_file:
       - ./config/credentials/.env

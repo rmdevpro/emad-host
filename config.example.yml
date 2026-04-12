@@ -18,13 +18,12 @@ log_level: INFO
 # has no effect — the container must be rebuilt.
 
 packages:
-  source: local
-  local_path: /app/packages
-  devpi_url: null
-  stategraph_packages:
-    - emad-host-ae
-    - emad-host-te
-    - emad-generic
+  source: pypi
+  local_path: /app/packages    # used when source: local
+  devpi_url: null               # used when source: devpi
+
+  ae: base-pmad-ae==0.1.0
+  te: base-pmad-te==0.1.0
 
 # ============================================================
 # Tuning Parameters

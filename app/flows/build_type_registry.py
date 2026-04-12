@@ -114,7 +114,7 @@ def clear_compiled_cache() -> None:
 
     Called after install_stategraph() to ensure next invocation
     recompiles graphs from updated packages. The registry itself
-    is repopulated by stategraph_registry.scan().
+    is repopulated by package_registry.scan().
     """
     with _lock:
         _compiled_cache.clear()
