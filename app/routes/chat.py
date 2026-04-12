@@ -341,7 +341,13 @@ async def _handle_emad_request(
 
     model = emad_instance["emad_name"]
     package_name = emad_instance["package_name"]
-    parameters = dict(emad_instance["parameters"]) if emad_instance["parameters"] else {}
+    raw_params = emad_instance["parameters"]
+    if isinstance(raw_params, str):
+        parameters = json.loads(raw_params)
+    elif raw_params:
+        parameters = dict(raw_params)
+    else:
+        parameters = {}
 
     build_func = emad_registry.get_build_func(package_name)
     if build_func is None:
