@@ -53,6 +53,22 @@ async def _install_package_node(state: InstallPackageState) -> InstallPackageSta
         installed = importlib.metadata.version(pkg)
         if ver is None or installed == ver:
             emad_registry.scan()
+            # Ensure DB record exists even if package was pre-installed at build time
+            try:
+                pool = get_pg_pool()
+                async with pool.acquire() as conn:
+                    await conn.execute(
+                        """
+                        INSERT INTO emad_packages (package_name, installed_version, status)
+                        VALUES ($1, $2, 'active')
+                        ON CONFLICT (package_name)
+                        DO UPDATE SET installed_version = $2, installed_at = NOW(), status = 'active'
+                        """,
+                        pkg,
+                        installed,
+                    )
+            except (asyncpg.PostgresError, asyncpg.InterfaceError) as exc:
+                _log.warning("install_package: DB record failed (non-fatal): %s", exc)
             return {
                 **state,
                 "result": {
