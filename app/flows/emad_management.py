@@ -15,6 +15,7 @@ app.config for package source settings.
 
 import asyncio
 import importlib.metadata
+import json
 import logging
 import sys
 from typing import TypedDict
@@ -226,12 +227,12 @@ async def _create_emad_node(state: CreateEmadState) -> CreateEmadState:
             await conn.execute(
                 """
                 INSERT INTO emad_instances (emad_name, package_name, description, parameters)
-                VALUES ($1, $2, $3, $4)
+                VALUES ($1, $2, $3, $4::jsonb)
                 """,
                 emad_name,
                 package_name,
                 state.get("description", ""),
-                state.get("parameters", {}),
+                json.dumps(state.get("parameters", {})),
             )
     except (asyncpg.PostgresError, asyncpg.InterfaceError) as exc:
         detail = str(exc)
@@ -288,8 +289,8 @@ async def _update_emad_node(state: UpdateEmadState) -> UpdateEmadState:
                 args.append(state["description"])
                 sets.append(f"description = ${len(args)}")
             if state.get("parameters") is not None:
-                args.append(state["parameters"])
-                sets.append(f"parameters = ${len(args)}")
+                args.append(json.dumps(state["parameters"]))
+                sets.append(f"parameters = ${len(args)}::jsonb")
             sets.append("updated_at = NOW()")
             await conn.execute(
                 f"UPDATE emad_instances SET {', '.join(sets)} WHERE emad_name = $1",
