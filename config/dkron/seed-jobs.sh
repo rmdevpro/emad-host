@@ -30,7 +30,7 @@ curl -s -X POST "${DKRON_URL}/v1/jobs" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "nadella-token-keepalive",
-    "schedule": "0 0 10 * * 1",
+    "schedule": "0 45 17 * * 1",
     "timezone": "America/New_York",
     "executor": "http",
     "executor_config": {
