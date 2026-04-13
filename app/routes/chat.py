@@ -65,6 +65,14 @@ async def _get_stategraph(model_name: str):
 
         package_name = row["package_name"]
         build_func = get_build_func(package_name)
+        if build_func is None:
+            # Lazy-load: package is installed but not yet in the registry
+            from app.package_registry import load_emad
+            try:
+                load_emad(package_name)
+                build_func = get_build_func(package_name)
+            except (ImportError, AttributeError) as exc:
+                _log.warning("Failed to load eMAD package '%s': %s", package_name, exc)
         if build_func is not None:
             graph = build_func({})
             _graph_cache[model_name] = graph

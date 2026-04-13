@@ -21,12 +21,15 @@ from langchain_core.tools import tool
 _log = logging.getLogger("emad_host.tools.emad_management")
 
 
-async def _pip_install(package_spec: str) -> dict:
+async def _pip_install(package_spec: str, extra_flags: list[str] | None = None) -> dict:
     """Run pip install --user --no-cache-dir for a package."""
     cmd = [
         sys.executable, "-m", "pip", "install",
-        "--user", "--no-cache-dir", package_spec,
+        "--user", "--no-cache-dir",
     ]
+    if extra_flags:
+        cmd.extend(extra_flags)
+    cmd.append(package_spec)
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -272,9 +275,10 @@ async def _op_update(name: str, version: str) -> str:
     except (asyncpg.PostgresError, RuntimeError) as exc:
         return f"ERROR: {exc}"
 
-    pkg_spec = f"{package}=={version}" if version else f"--upgrade {package}"
-
-    result = await _pip_install(pkg_spec)
+    if version:
+        result = await _pip_install(f"{package}=={version}")
+    else:
+        result = await _pip_install(package, extra_flags=["--upgrade"])
     if not result["ok"]:
         return f"ERROR upgrading {package}: {result['error']}"
 
