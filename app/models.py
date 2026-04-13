@@ -30,49 +30,6 @@ class MetricsGetInput(BaseModel):
 
 
 # ============================================================
-# eMAD Tool Input Models
-# ============================================================
-
-
-class EmadChatInput(BaseModel):
-    """Input for emad_chat."""
-
-    emad_name: str = Field(..., min_length=1, max_length=100)
-    conversation_id: str = Field(default="")
-    message: str = Field(..., min_length=1, max_length=32000)
-
-
-class EmadInstallPackageInput(BaseModel):
-    """Input for emad_install_package."""
-
-    package_name: str = Field(..., min_length=1, max_length=100)
-    version: Optional[str] = None
-
-
-class EmadCreateInput(BaseModel):
-    """Input for emad_create."""
-
-    emad_name: str = Field(..., min_length=1, max_length=100)
-    package_name: str = Field(..., min_length=1, max_length=100)
-    description: str = Field(default="")
-    parameters: dict = Field(default_factory=dict)
-
-
-class EmadUpdateInput(BaseModel):
-    """Input for emad_update."""
-
-    emad_name: str = Field(..., min_length=1, max_length=100)
-    description: Optional[str] = None
-    parameters: Optional[dict] = None
-
-
-class EmadDeleteInput(BaseModel):
-    """Input for emad_delete."""
-
-    emad_name: str = Field(..., min_length=1, max_length=100)
-
-
-# ============================================================
 # OpenAI-compatible chat models
 # ============================================================
 

@@ -30,6 +30,7 @@ from app.tools.notify import send_notification
 from app.tools.operational import search_domain_info, store_domain_info
 from app.tools.system import run_command
 from app.tools.web import web_read, web_search
+from app.tools.emad_management import manage_emad
 
 # Master registry: tool_name -> tool callable
 TOOL_REGISTRY: dict = {
@@ -63,6 +64,8 @@ TOOL_REGISTRY: dict = {
     # Web
     "web_search": web_search,
     "web_read": web_read,
+    # eMAD management (host Imperator only)
+    "manage_emad": manage_emad,
 }
 
 # Tools restricted to the host Imperator (model: "host")
@@ -74,6 +77,7 @@ ADMIN_TOOLS = {
     "verbose_toggle",
     "read_system_prompt",
     "update_system_prompt",
+    "manage_emad",
 }
 
 

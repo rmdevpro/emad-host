@@ -32,38 +32,49 @@ router = APIRouter()
 _graph_cache: dict = {}
 
 
-def _get_stategraph(model_name: str):
+async def _get_stategraph(model_name: str):
     """Look up and return the compiled stategraph for the given model name.
 
     Caches compiled graphs. Returns None if the model is not registered.
 
     Lookup order:
-    1. eMAD directory (/emads/{model_name}/config.json exists) → runbook-emad-te
-    2. Host Imperator (fallback for any model name when TE is loaded)
+    1. Host Imperator (model name "host")
+    2. Routing table in DB (emad_instances → package_name → build_graph)
     """
     if model_name in _graph_cache:
         return _graph_cache[model_name]
 
-    import os
-
     from app.package_registry import get_imperator_builder, get_build_func
 
-    # Check if this model has an eMAD config directory
-    emad_config_path = f"/emads/{model_name}/config.json"
-    if os.path.isfile(emad_config_path):
-        build_func = get_build_func("runbook-emad-te")
-        if build_func is not None:
-            graph = build_func({})
-            _graph_cache[model_name] = graph
-            return graph
-
-    # Host Imperator — only for the "host" model name
+    # Host Imperator
     if model_name == "host":
         builder = get_imperator_builder()
         if builder is not None:
             graph = builder()
             _graph_cache[model_name] = graph
             return graph
+        return None
+
+    # eMAD routing table — look up package name from DB
+    try:
+        from app.database import get_pg_pool
+
+        pool = get_pg_pool()
+        row = await pool.fetchrow(
+            "SELECT package_name FROM emad_instances WHERE emad_name = $1 AND status = 'active'",
+            model_name,
+        )
+        if row is None:
+            return None
+
+        package_name = row["package_name"]
+        build_func = get_build_func(package_name)
+        if build_func is not None:
+            graph = build_func({})
+            _graph_cache[model_name] = graph
+            return graph
+    except (RuntimeError, OSError) as exc:
+        _log.warning("Failed to look up eMAD '%s': %s", model_name, exc)
 
     return None
 
@@ -107,7 +118,7 @@ async def chat_completions(request: Request):
     model = chat_request.model
 
     # Look up stategraph for this model name
-    graph = _get_stategraph(model)
+    graph = await _get_stategraph(model)
     if graph is None:
         return JSONResponse(
             status_code=404,
