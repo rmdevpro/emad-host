@@ -2,7 +2,11 @@
 config/credentials/.env
 config/credentials/.env.local-backup
 config/credentials/postgres_password.txt
+config/credentials/*.json
+config/credentials/*.pem
+config/credentials/*.key
 .env
+docker-compose.override.yml
 
 # Persistent data volumes (managed by Docker)
 # Directories tracked via .gitkeep for zero-script deployment (ERQ-003 §5.1.1).

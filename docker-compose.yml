@@ -1,11 +1,12 @@
-# Context Broker — Docker Compose
+# eMAD Host pMAD — Docker Compose
 # State 4 MAD: standalone deployment, all dependencies configurable
 #
 # Usage:
-#   docker compose up -d
+#   1. Copy config/credentials/.env.example to config/credentials/.env
+#   2. Fill in credentials
+#   3. docker compose up -d --build
 #
-# Customize host paths, ports, and resource limits via docker-compose.override.yml
-# Do not modify this file directly.
+# All configuration is in .env — no override file needed.
 
 services:
 
@@ -79,9 +80,6 @@ services:
       start_period: 30s
       retries: 3
 
-  # Log collection for Imperator diagnostics.
-  # Discovers all containers on emad-host-net via Docker API,
-  # tails their logs, and writes to Postgres with resolved container names.
   emad-host-log-shipper:
     build:
       context: ./log_shipper
@@ -99,9 +97,6 @@ services:
     env_file:
       - ./config/credentials/.env
 
-  # Autoprompter — Dkron scheduler for time-based and event-driven
-  # Imperator activation. Fires HTTP callbacks to the langgraph container's
-  # dispatcher stategraph. No custom code — OTS image.
   emad-host-dkron:
     image: dkron/dkron:4.1.0
     container_name: emad-host-dkron
@@ -120,8 +115,6 @@ services:
       start_period: 30s
       retries: 3
 
-  # Gradio Chat UI for the Imperator.
-  # Multi-MAD client — connects to any State 4 MAD via standard endpoints.
   emad-host-ui:
     build:
       context: ./ui
@@ -133,9 +126,6 @@ services:
     volumes:
       - ./ui/config.yml:/app/config.yml:ro
 
-  # Alerter webhook relay.
-  # Receives CloudEvents webhooks from the Imperator's send_notification tool,
-  # optionally formats via LLM, and fans out to Slack/Discord/ntfy/SMTP/webhook.
   emad-host-alerter:
     build:
       context: ./alerter
