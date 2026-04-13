@@ -254,6 +254,45 @@ app.include_router(chat.router)
 app.include_router(autoprompt.router)
 
 
+@app.get("/debug/checkpointer")
+async def debug_checkpointer():
+    """Test the checkpointer directly from the app process."""
+    from langgraph.graph import StateGraph, END
+    from langchain_core.messages import HumanMessage, AIMessage, AnyMessage
+    from langgraph.graph.message import add_messages
+    from typing import Annotated
+    from typing_extensions import TypedDict
+    from app.checkpointer import get_checkpointer
+    from fastapi.responses import JSONResponse
+
+    class S(TypedDict):
+        messages: Annotated[list[AnyMessage], add_messages]
+
+    async def echo(state):
+        last = state["messages"][-1]
+        return {"messages": [AIMessage(content="Echo: " + last.content)]}
+
+    cp = get_checkpointer()
+    graph = StateGraph(S)
+    graph.add_node("echo", echo)
+    graph.set_entry_point("echo")
+    graph.add_edge("echo", END)
+    app_graph = graph.compile(checkpointer=cp)
+
+    config = {"configurable": {"thread_id": "debug-inline-test"}}
+    r1 = await app_graph.ainvoke({"messages": [HumanMessage(content="hello")]}, config)
+    r2 = await app_graph.ainvoke({"messages": [HumanMessage(content="recall")]}, config)
+
+    return JSONResponse({
+        "checkpointer": type(cp).__name__,
+        "checkpointer_id": id(cp),
+        "turn1_msgs": len(r1["messages"]),
+        "turn2_msgs": len(r2["messages"]),
+        "turn2_last": r2["messages"][-1].content,
+        "works": len(r2["messages"]) == 4,
+    })
+
+
 @app.middleware("http")
 async def check_postgres_middleware(request: Request, call_next):
     """Return 503 for routes that need Postgres when it is unavailable."""
