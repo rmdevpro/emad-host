@@ -96,18 +96,21 @@ install_emad_package() {
     local pkg_spec="$1"
     if [ -z "$pkg_spec" ]; then return; fi
 
+    # eMAD install failures are non-fatal — the host should still start
     case "$PKG_SOURCE" in
         devpi)
             if [ -n "$PKG_DEVPI_URL" ]; then
                 echo "Installing eMAD $pkg_spec from devpi"
-                pip install --user --no-cache-dir --index-url "$PKG_DEVPI_URL" "$pkg_spec"
+                pip install --user --no-cache-dir --index-url "$PKG_DEVPI_URL" "$pkg_spec" || \
+                    echo "WARNING: Failed to install eMAD $pkg_spec from devpi"
             else
                 echo "WARNING: devpi_url not set, cannot install $pkg_spec"
             fi
             ;;
         pypi|*)
             echo "Installing eMAD $pkg_spec from PyPI"
-            pip install --user --no-cache-dir "$pkg_spec"
+            pip install --user --no-cache-dir "$pkg_spec" || \
+                echo "WARNING: Failed to install eMAD $pkg_spec from PyPI"
             ;;
     esac
 }
