@@ -41,8 +41,9 @@ async def _get_stategraph(model_name: str):
     1. Host Imperator (model name "host")
     2. Routing table in DB (emad_instances → package_name → build_graph)
     """
-    if model_name in _graph_cache:
-        return _graph_cache[model_name]
+    # TEMPORARY: skip cache to debug checkpointer issue
+    # if model_name in _graph_cache:
+    #     return _graph_cache[model_name]
 
     from app.package_registry import get_imperator_builder, get_build_func
 
@@ -51,7 +52,7 @@ async def _get_stategraph(model_name: str):
         builder = get_imperator_builder()
         if builder is not None:
             graph = builder()
-            _graph_cache[model_name] = graph
+            # _graph_cache[model_name] = graph
             return graph
         return None
 
