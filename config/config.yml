@@ -51,7 +51,7 @@ packages:
   local_path: /app/packages
   source: pypi
   ae: base-pmad-ae==0.2.0
-  te: base-pmad-te-ncb==0.1.4
+  te: base-pmad-te-ncb==0.2.0
 reranker:
   base_url: http://emad-host-infinity:7997
   model: mixedbread-ai/mxbai-rerank-xsmall-v1
