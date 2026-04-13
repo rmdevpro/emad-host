@@ -33,26 +33,22 @@ _graph_cache: dict = {}
 
 
 async def _get_stategraph(model_name: str):
-    """Look up and return the compiled stategraph for the given model name.
+    """Look up and return a compiled stategraph for the given model name.
 
-    Caches compiled graphs. Returns None if the model is not registered.
+    Compiles a fresh graph each invocation so the checkpointer can
+    properly load/save conversation state between calls.
 
     Lookup order:
     1. Host Imperator (model name "host")
     2. Routing table in DB (emad_instances → package_name → build_graph)
     """
-    if model_name in _graph_cache:
-        return _graph_cache[model_name]
-
     from app.package_registry import get_imperator_builder, get_build_func
 
     # Host Imperator
     if model_name == "host":
         builder = get_imperator_builder()
         if builder is not None:
-            graph = builder()
-            _graph_cache[model_name] = graph
-            return graph
+            return builder()
         return None
 
     # eMAD routing table — look up package name from DB
