@@ -143,7 +143,11 @@ async def lifespan(application: FastAPI):
             # Create pool directly — same pattern as the working minimal test
             from psycopg_pool import AsyncConnectionPool
 
-            cp_pool = AsyncConnectionPool(conninfo=dsn, open=False)
+            cp_pool = AsyncConnectionPool(
+                conninfo=dsn,
+                open=False,
+                kwargs={"autocommit": True},
+            )
             await cp_pool.open()
             checkpointer = AsyncPostgresSaver(cp_pool)
             await checkpointer.setup()
