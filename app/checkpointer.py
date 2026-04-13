@@ -16,11 +16,12 @@ def set_checkpointer(cp) -> None:
     """Set the checkpointer singleton. Called from main.py lifespan."""
     global _checkpointer
     _checkpointer = cp
-    _log.info("Checkpointer set: %s", type(cp).__name__)
+    _log.info("Checkpointer set: %s (id=%s)", type(cp).__name__, id(cp))
 
 
 def get_checkpointer():
     """Return the checkpointer. Raises if not initialized."""
     if _checkpointer is None:
         raise RuntimeError("Checkpointer not initialized — startup not complete")
+    _log.info("Checkpointer get: %s (id=%s)", type(_checkpointer).__name__, id(_checkpointer))
     return _checkpointer
