@@ -140,12 +140,15 @@ async def lifespan(application: FastAPI):
             pg_pass = os.environ.get("POSTGRES_PASSWORD", "")
             dsn = f"postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}"
 
-            # Use the async context manager pattern
-            cp_ctx = AsyncPostgresSaver.from_conn_string(dsn)
-            checkpointer = await cp_ctx.__aenter__()
+            # Create pool directly — same pattern as the working minimal test
+            from psycopg_pool import AsyncConnectionPool
+
+            cp_pool = AsyncConnectionPool(conninfo=dsn, open=False)
+            await cp_pool.open()
+            checkpointer = AsyncPostgresSaver(cp_pool)
             await checkpointer.setup()
             set_checkpointer(checkpointer)
-            application.state.checkpointer_ctx = cp_ctx
+            application.state.checkpointer_pool = cp_pool
             _log.info("AsyncPostgresSaver checkpointer initialized")
         except (OSError, RuntimeError, ImportError) as exc:
             _log.warning("Failed to initialize checkpointer: %s", exc)
@@ -214,13 +217,13 @@ async def lifespan(application: FastAPI):
             await t
         except asyncio.CancelledError:
             pass
-    # Close checkpointer
-    cp_ctx = getattr(application.state, "checkpointer_ctx", None)
-    if cp_ctx is not None:
+    # Close checkpointer pool
+    cp_pool = getattr(application.state, "checkpointer_pool", None)
+    if cp_pool is not None:
         try:
-            await cp_ctx.__aexit__(None, None, None)
+            await cp_pool.close()
         except (OSError, RuntimeError) as exc:
-            _log.warning("Failed to close checkpointer: %s", exc)
+            _log.warning("Failed to close checkpointer pool: %s", exc)
 
     await close_all_connections()
     _log.info("eMAD Host shutdown complete")
