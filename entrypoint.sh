@@ -88,9 +88,31 @@ install_package() {
 install_package "$PKG_AE"
 install_package "$PKG_TE"
 
-# ── Install eMAD TE packages referenced by /emads/ configs ─────────────
-# Each eMAD directory has a config.json. For now all use runbook-emad-te.
-# Future: read the TE package name from config.json per eMAD.
+# ── Install eMAD packages ─────────────────────────────────────────────
+# eMAD packages have platform-specific deps (google-api-python-client,
+# msal, etc.) NOT in the base image, so they install WITH dependencies.
+
+install_emad_package() {
+    local pkg_spec="$1"
+    if [ -z "$pkg_spec" ]; then return; fi
+
+    case "$PKG_SOURCE" in
+        devpi)
+            if [ -n "$PKG_DEVPI_URL" ]; then
+                echo "Installing eMAD $pkg_spec from devpi"
+                pip install --user --no-cache-dir --index-url "$PKG_DEVPI_URL" "$pkg_spec"
+            else
+                echo "WARNING: devpi_url not set, cannot install $pkg_spec"
+            fi
+            ;;
+        pypi|*)
+            echo "Installing eMAD $pkg_spec from PyPI"
+            pip install --user --no-cache-dir "$pkg_spec"
+            ;;
+    esac
+}
+
+# Install eMAD packages from /emads/ configs (runbook-based eMADs)
 if [ -d "/emads" ]; then
     EMAD_TE_INSTALLED=""
     for emad_dir in /emads/*/; do
@@ -98,12 +120,45 @@ if [ -d "/emads" ]; then
             emad_name=$(basename "$emad_dir")
             echo "eMAD found: $emad_name"
             if [ -z "$EMAD_TE_INSTALLED" ]; then
-                install_package "runbook-emad-te"
+                install_emad_package "runbook-emad-te"
                 EMAD_TE_INSTALLED="yes"
             fi
         fi
     done
 fi
+
+# Install eMAD packages registered in the database
+python3 -c "
+import asyncio, asyncpg, os
+async def main():
+    dsn = 'postgresql://{}:{}@{}:{}/{}'.format(
+        os.environ.get('POSTGRES_USER', 'emad_host'),
+        os.environ.get('POSTGRES_PASSWORD', ''),
+        os.environ.get('POSTGRES_HOST', 'emad-host-postgres'),
+        os.environ.get('POSTGRES_PORT', '5432'),
+        os.environ.get('POSTGRES_DB', 'emad_host'),
+    )
+    try:
+        conn = await asyncpg.connect(dsn, timeout=5)
+        rows = await conn.fetch(
+            'SELECT DISTINCT package_name, installed_version FROM emad_packages WHERE status = \$1',
+            'active',
+        )
+        await conn.close()
+        for row in rows:
+            pkg = row['package_name']
+            ver = row['installed_version']
+            if ver and ver != 'unknown':
+                print(f'{pkg}=={ver}')
+            else:
+                print(pkg)
+    except Exception as e:
+        import sys
+        print(f'WARNING: Could not read emad_packages: {e}', file=sys.stderr)
+asyncio.run(main())
+" 2>/dev/null | while read pkg_spec; do
+    install_emad_package "$pkg_spec"
+done
 
 # Start the application
 exec python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
