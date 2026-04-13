@@ -1,0 +1,20 @@
+{
+  "name": "Weather Reporter",
+  "identity": "You are the Weather Reporter, a helpful agent that checks weather conditions and sends summaries.",
+  "purpose": "Check weather conditions for configured locations and send notification summaries via the alerter.",
+  "runbook": "runbook.md",
+  "llm": {
+    "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "model": "gemini-2.5-flash-lite",
+    "api_key_env": "GOOGLE_API_KEY",
+    "temperature": 0.3
+  },
+  "tools": {
+    "web_search": {},
+    "send_notification": {}
+  },
+  "knowledge_tags": ["<policy>"],
+  "compaction_token_trigger": 0.8,
+  "compaction_idle_trigger": 60,
+  "chat_endpoints": {}
+}

@@ -103,6 +103,47 @@ async def _migration_004(conn) -> None:
     _log.info("Migration 004 complete — emad_packages and emad_instances tables")
 
 
+async def _migration_005(conn) -> None:
+    """Migration 5: Create domain_information table with auto-embedding trigger."""
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS domain_information (
+            id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            content     TEXT NOT NULL,
+            source      VARCHAR(100) NOT NULL DEFAULT 'host',
+            embedding   vector(768),
+            created_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+        )
+    """)
+    await conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_domain_info_source
+            ON domain_information(source)
+    """)
+    await conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_domain_info_embedding
+            ON domain_information USING ivfflat (embedding vector_cosine_ops)
+            WITH (lists = 100)
+    """)
+    await conn.execute("""
+        CREATE OR REPLACE FUNCTION notify_domain_info_new()
+        RETURNS trigger AS $$
+        BEGIN
+            PERFORM pg_notify('domain_info_new', NEW.id::text);
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql
+    """)
+    await conn.execute("""
+        DROP TRIGGER IF EXISTS trg_domain_info_new ON domain_information
+    """)
+    await conn.execute("""
+        CREATE TRIGGER trg_domain_info_new
+            AFTER INSERT ON domain_information
+            FOR EACH ROW
+            EXECUTE FUNCTION notify_domain_info_new()
+    """)
+    _log.info("Migration 005 complete — domain_information table with auto-embedding trigger")
+
+
 # Migration registry: version -> (description, migration_function)
 # Add new migrations here. Never modify existing entries.
 # IMPORTANT: This list MUST appear after all _migration_NNN function definitions.
@@ -122,6 +163,11 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
         4,
         "Create eMAD registry tables for eMAD hosting",
         _migration_004,
+    ),
+    (
+        5,
+        "Create domain_information table with auto-embedding trigger",
+        _migration_005,
     ),
 ]
 

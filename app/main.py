@@ -146,12 +146,41 @@ async def lifespan(application: FastAPI):
                 _postgres_retry_loop(application, config)
             )
 
-    _log.info("Context Broker startup complete")
+    # Set up LISTEN for domain_information auto-embedding
+    listen_conn = None
+    if getattr(application.state, "postgres_available", False):
+        try:
+            from app.database import get_pg_pool
+            from app.flows.embedding_worker import embed_row
+
+            pool = get_pg_pool()
+            listen_conn = await pool.acquire()
+
+            async def _on_domain_info(conn, pid, channel, payload):
+                try:
+                    await embed_row(payload)
+                except (OSError, RuntimeError, ValueError) as exc:
+                    _log.warning("Domain info embedding failed for %s: %s", payload, exc)
+
+            await listen_conn.add_listener("domain_info_new", _on_domain_info)
+            _log.info("LISTEN domain_info_new — auto-embedding active")
+        except (OSError, RuntimeError, asyncpg.PostgresError) as exc:
+            _log.warning("Failed to set up domain_info LISTEN: %s", exc)
+
+    _log.info("eMAD Host startup complete")
 
     yield
 
     # Shutdown
-    _log.info("Context Broker shutting down")
+    _log.info("eMAD Host shutting down")
+
+    if listen_conn is not None:
+        try:
+            await listen_conn.remove_listener("domain_info_new", _on_domain_info)
+            pool = get_pg_pool()
+            await pool.release(listen_conn)
+        except (OSError, RuntimeError) as exc:
+            _log.warning("Failed to clean up LISTEN connection: %s", exc)
 
     tasks_to_cancel = [t for t in [pg_retry_task] if t is not None]
     for t in tasks_to_cancel:
@@ -162,7 +191,7 @@ async def lifespan(application: FastAPI):
         except asyncio.CancelledError:
             pass
     await close_all_connections()
-    _log.info("Context Broker shutdown complete")
+    _log.info("eMAD Host shutdown complete")
 
 
 app = FastAPI(

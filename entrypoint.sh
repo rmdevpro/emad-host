@@ -88,5 +88,22 @@ install_package() {
 install_package "$PKG_AE"
 install_package "$PKG_TE"
 
+# ── Install eMAD TE packages referenced by /emads/ configs ─────────────
+# Each eMAD directory has a config.json. For now all use runbook-emad-te.
+# Future: read the TE package name from config.json per eMAD.
+if [ -d "/emads" ]; then
+    EMAD_TE_INSTALLED=""
+    for emad_dir in /emads/*/; do
+        if [ -f "${emad_dir}config.json" ]; then
+            emad_name=$(basename "$emad_dir")
+            echo "eMAD found: $emad_name"
+            if [ -z "$EMAD_TE_INSTALLED" ]; then
+                install_package "runbook-emad-te"
+                EMAD_TE_INSTALLED="yes"
+            fi
+        fi
+    done
+fi
+
 # Start the application
 exec python -m uvicorn app.main:app --host 0.0.0.0 --port 8000

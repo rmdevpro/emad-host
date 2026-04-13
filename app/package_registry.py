@@ -13,6 +13,7 @@ Supports hot-reload via sys.modules eviction + importlib.invalidate_caches().
 import importlib
 import importlib.metadata
 import logging
+import os
 import sys
 import threading
 from typing import Callable
@@ -226,6 +227,21 @@ def scan_from_config(config: dict) -> dict:
                 "TE package '%s' not available — Imperator will not be available",
                 te_name,
             )
+
+    # Scan emads/ directory and pre-load eMAD packages
+    emads_dir = "/emads"
+    if os.path.isdir(emads_dir):
+        for name in os.listdir(emads_dir):
+            config_path = os.path.join(emads_dir, name, "config.json")
+            if os.path.isfile(config_path):
+                # Each eMAD directory is a model name; we need to know
+                # which TE package it uses. For now, all use runbook-emad-te.
+                try:
+                    load_emad("runbook-emad-te")
+                    _log.info("eMAD discovered: %s", name)
+                except (ImportError, AttributeError, TypeError, ValueError):
+                    _log.warning("eMAD '%s' found but runbook-emad-te not installed", name)
+                break  # Only need to load the package once; configs are per-model
 
     return result
 
