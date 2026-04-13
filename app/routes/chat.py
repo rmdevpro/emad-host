@@ -145,6 +145,7 @@ async def chat_completions(request: Request):
 
     initial_state = {"payload": body}
     graph_config = {"configurable": {"thread_id": conv_id}}
+    _log.info("Invoking model=%s thread_id=%s", model, conv_id)
 
     try:
         if chat_request.stream:
