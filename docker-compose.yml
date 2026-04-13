@@ -43,7 +43,7 @@ services:
       - ./config:/config
       - ./data:/data
       - ./config/runbooks:/config/runbooks:ro
-      - ./emads:/emads:ro
+      - ./emads:/emads
     env_file:
       - ./config/credentials/.env
     environment:
