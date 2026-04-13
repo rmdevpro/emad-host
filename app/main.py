@@ -265,8 +265,26 @@ async def debug_checkpointer():
     from app.checkpointer import get_checkpointer
     from fastapi.responses import JSONResponse
 
+    from typing import Optional
+
     class S(TypedDict):
+        payload: dict
         messages: Annotated[list[AnyMessage], add_messages]
+        conversation_id: Optional[str]
+        response_text: Optional[str]
+        error: Optional[str]
+        iteration_count: int
+
+    async def init_node(state):
+        existing = state.get("messages", [])
+        payload = state.get("payload", {})
+        msg = payload.get("msg", "empty")
+        result = {"iteration_count": 0}
+        if existing:
+            result["messages"] = [HumanMessage(content=msg)]
+        else:
+            result["messages"] = [HumanMessage(content=msg)]
+        return result
 
     async def echo(state):
         last = state["messages"][-1]
@@ -274,14 +292,16 @@ async def debug_checkpointer():
 
     cp = get_checkpointer()
     graph = StateGraph(S)
+    graph.add_node("init_node", init_node)
     graph.add_node("echo", echo)
-    graph.set_entry_point("echo")
+    graph.set_entry_point("init_node")
+    graph.add_edge("init_node", "echo")
     graph.add_edge("echo", END)
     app_graph = graph.compile(checkpointer=cp)
 
-    config = {"configurable": {"thread_id": "debug-inline-test"}}
-    r1 = await app_graph.ainvoke({"messages": [HumanMessage(content="hello")]}, config)
-    r2 = await app_graph.ainvoke({"messages": [HumanMessage(content="recall")]}, config)
+    config = {"configurable": {"thread_id": "debug-payload-test"}}
+    r1 = await app_graph.ainvoke({"payload": {"msg": "hello"}}, config)
+    r2 = await app_graph.ainvoke({"payload": {"msg": "recall"}}, config)
 
     return JSONResponse({
         "checkpointer": type(cp).__name__,
