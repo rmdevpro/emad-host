@@ -256,17 +256,18 @@ app.include_router(autoprompt.router)
 
 @app.get("/debug/checkpointer")
 async def debug_checkpointer():
-    """Test the checkpointer directly from the app process."""
+    """Test checkpointer with a proper ReAct agent (tools + conditional edges)."""
     from langgraph.graph import StateGraph, END
     from langchain_core.messages import HumanMessage, AIMessage, AnyMessage
+    from langchain_core.tools import tool
     from langgraph.graph.message import add_messages
-    from typing import Annotated
+    from langgraph.prebuilt import ToolNode
+    from typing import Annotated, Optional
     from typing_extensions import TypedDict
     from app.checkpointer import get_checkpointer
     from fastapi.responses import JSONResponse
 
-    from typing import Optional
-
+    # Same state as the TE
     class S(TypedDict):
         payload: dict
         messages: Annotated[list[AnyMessage], add_messages]
@@ -275,42 +276,109 @@ async def debug_checkpointer():
         error: Optional[str]
         iteration_count: int
 
+    # A dummy tool
+    @tool
+    async def dummy_tool(query: str) -> str:
+        """A dummy tool for testing."""
+        return f"Result for: {query}"
+
+    tools = [dummy_tool]
+
     async def init_node(state):
         existing = state.get("messages", [])
         payload = state.get("payload", {})
         msg = payload.get("msg", "empty")
-        result = {"iteration_count": 0}
         if existing:
-            result["messages"] = [HumanMessage(content=msg)]
-        else:
-            result["messages"] = [HumanMessage(content=msg)]
-        return result
+            return {"messages": [HumanMessage(content=msg)], "iteration_count": 0}
+        return {"messages": [HumanMessage(content=msg)], "iteration_count": 0}
 
-    async def echo(state):
+    async def llm_node(state):
+        # Fake LLM — just echo, no tool calls
         last = state["messages"][-1]
-        return {"messages": [AIMessage(content="Echo: " + last.content)]}
+        return {
+            "messages": [AIMessage(content="Echo: " + last.content)],
+            "iteration_count": state.get("iteration_count", 0) + 1,
+        }
+
+    def should_continue(state):
+        if state.get("error"):
+            return "extract"
+        last = state["messages"][-1]
+        if isinstance(last, AIMessage) and last.tool_calls:
+            return "tool_node"
+        return "extract"
+
+    def extract(state):
+        for msg in reversed(state.get("messages", [])):
+            if isinstance(msg, AIMessage) and msg.content:
+                return {"response_text": msg.content}
+        return {"response_text": "[none]"}
 
     cp = get_checkpointer()
-    graph = StateGraph(S)
-    graph.add_node("init_node", init_node)
-    graph.add_node("echo", echo)
-    graph.set_entry_point("init_node")
-    graph.add_edge("init_node", "echo")
-    graph.add_edge("echo", END)
-    app_graph = graph.compile(checkpointer=cp)
+    tool_node = ToolNode(tools)
 
-    config = {"configurable": {"thread_id": "debug-payload-test"}}
+    g = StateGraph(S)
+    g.add_node("init_node", init_node)
+    g.add_node("llm_node", llm_node)
+    g.add_node("tool_node", tool_node)
+    g.add_node("extract", extract)
+
+    g.set_entry_point("init_node")
+    g.add_edge("init_node", "llm_node")
+    g.add_conditional_edges("llm_node", should_continue, {
+        "tool_node": "tool_node",
+        "extract": "extract",
+    })
+    g.add_edge("tool_node", "llm_node")
+    g.add_edge("extract", END)
+
+    app_graph = g.compile(checkpointer=cp)
+
+    config = {"configurable": {"thread_id": "debug-react-test"}}
     r1 = await app_graph.ainvoke({"payload": {"msg": "hello"}}, config)
     r2 = await app_graph.ainvoke({"payload": {"msg": "recall"}}, config)
 
-    return JSONResponse({
-        "checkpointer": type(cp).__name__,
-        "checkpointer_id": id(cp),
-        "turn1_msgs": len(r1["messages"]),
-        "turn2_msgs": len(r2["messages"]),
-        "turn2_last": r2["messages"][-1].content,
-        "works": len(r2["messages"]) == 4,
-    })
+    # Also test the actual TE build
+    from app.package_registry import get_imperator_builder
+    builder = get_imperator_builder()
+    if builder:
+        te_graph = builder()
+        te_config = {"configurable": {"thread_id": "debug-te-test"}}
+        te_r1 = await te_graph.ainvoke({"payload": {"model": "host", "messages": [{"role": "user", "content": "hello from debug"}]}}, te_config)
+        te_existing_1 = "unknown"
+        te_r2 = await te_graph.ainvoke({"payload": {"model": "host", "messages": [{"role": "user", "content": "what did I say"}]}}, te_config)
+        te_msgs_2 = len(te_r2.get("messages", []))
+
+    result = {
+        "react_graph": {
+            "turn1_msgs": len(r1["messages"]),
+            "turn2_msgs": len(r2["messages"]),
+            "turn2_last": r2["messages"][-1].content,
+            "works": len(r2["messages"]) == 4,
+        },
+    }
+
+    # Also test the actual TE build
+    from app.package_registry import get_imperator_builder
+    builder = get_imperator_builder()
+    if builder:
+        te_graph = builder()
+        te_config = {"configurable": {"thread_id": "debug-te-test"}}
+        te_r1 = await te_graph.ainvoke(
+            {"payload": {"model": "host", "messages": [{"role": "user", "content": "hello from debug"}]}},
+            te_config,
+        )
+        te_r2 = await te_graph.ainvoke(
+            {"payload": {"model": "host", "messages": [{"role": "user", "content": "what did I say"}]}},
+            te_config,
+        )
+        result["te_graph"] = {
+            "turn1_msgs": len(te_r1.get("messages", [])),
+            "turn2_msgs": len(te_r2.get("messages", [])),
+            "works": len(te_r2.get("messages", [])) > len(te_r1.get("messages", [])),
+        }
+
+    return JSONResponse(result)
 
 
 @app.middleware("http")
