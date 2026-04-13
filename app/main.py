@@ -126,6 +126,29 @@ async def lifespan(application: FastAPI):
         application.state.postgres_available = False
         pg_retry_task = asyncio.create_task(_postgres_retry_loop(application, config))
 
+    # Initialize PostgresSaver checkpointer for conversation persistence
+    if getattr(application.state, "postgres_available", False):
+        try:
+            import os
+            from langgraph.checkpoint.postgres import PostgresSaver
+            from app.checkpointer import set_checkpointer
+
+            pg_host = os.environ.get("POSTGRES_HOST", "emad-host-postgres")
+            pg_port = os.environ.get("POSTGRES_PORT", "5432")
+            pg_db = os.environ.get("POSTGRES_DB", "emad_host")
+            pg_user = os.environ.get("POSTGRES_USER", "emad_host")
+            pg_pass = os.environ.get("POSTGRES_PASSWORD", "")
+            dsn = f"postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}?options=-c%20search_path%3Dpublic"
+
+            import psycopg
+            conn = psycopg.connect(dsn, autocommit=True)
+            checkpointer = PostgresSaver(conn=conn)
+            checkpointer.setup()
+            set_checkpointer(checkpointer)
+            _log.info("PostgresSaver checkpointer initialized")
+        except (OSError, RuntimeError, ImportError) as exc:
+            _log.warning("Failed to initialize checkpointer: %s", exc)
+
     # Initialize Imperator persistent state
     imperator_manager = ImperatorStateManager(config)
     application.state.imperator_manager = imperator_manager
