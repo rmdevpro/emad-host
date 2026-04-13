@@ -16,6 +16,8 @@ langchain-postgres==0.0.13
 asyncpg==0.30.0
 psycopg2-binary==2.9.10
 langgraph-checkpoint-postgres>=3.0.5
+psycopg[binary]>=3.1.0
+psycopg-pool>=3.1.0
 
 # Observability
 prometheus-client==0.21.1

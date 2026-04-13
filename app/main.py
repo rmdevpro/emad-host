@@ -126,11 +126,11 @@ async def lifespan(application: FastAPI):
         application.state.postgres_available = False
         pg_retry_task = asyncio.create_task(_postgres_retry_loop(application, config))
 
-    # Initialize PostgresSaver checkpointer for conversation persistence
+    # Initialize AsyncPostgresSaver checkpointer for conversation persistence
     if getattr(application.state, "postgres_available", False):
         try:
             import os
-            from langgraph.checkpoint.postgres import PostgresSaver
+            from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
             from app.checkpointer import set_checkpointer
 
             pg_host = os.environ.get("POSTGRES_HOST", "emad-host-postgres")
@@ -138,14 +138,17 @@ async def lifespan(application: FastAPI):
             pg_db = os.environ.get("POSTGRES_DB", "emad_host")
             pg_user = os.environ.get("POSTGRES_USER", "emad_host")
             pg_pass = os.environ.get("POSTGRES_PASSWORD", "")
-            dsn = f"postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}?options=-c%20search_path%3Dpublic"
+            dsn = f"postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}"
 
-            import psycopg
-            conn = psycopg.connect(dsn, autocommit=True)
-            checkpointer = PostgresSaver(conn=conn)
-            checkpointer.setup()
+            from psycopg_pool import AsyncConnectionPool
+
+            pool = AsyncConnectionPool(conninfo=dsn)
+            await pool.open()
+            checkpointer = AsyncPostgresSaver(pool)
+            await checkpointer.setup()
             set_checkpointer(checkpointer)
-            _log.info("PostgresSaver checkpointer initialized")
+            application.state.checkpointer_pool = pool
+            _log.info("AsyncPostgresSaver checkpointer initialized")
         except (OSError, RuntimeError, ImportError) as exc:
             _log.warning("Failed to initialize checkpointer: %s", exc)
 
@@ -213,6 +216,14 @@ async def lifespan(application: FastAPI):
             await t
         except asyncio.CancelledError:
             pass
+    # Close checkpointer pool
+    cp_pool = getattr(application.state, "checkpointer_pool", None)
+    if cp_pool is not None:
+        try:
+            await cp_pool.close()
+        except (OSError, RuntimeError) as exc:
+            _log.warning("Failed to close checkpointer pool: %s", exc)
+
     await close_all_connections()
     _log.info("eMAD Host shutdown complete")
 
