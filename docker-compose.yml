@@ -122,7 +122,10 @@ services:
     hostname: emad-host-ui
     restart: unless-stopped
     networks:
+      - default
       - emad-host-net
+    ports:
+      - "8083:7860"
     volumes:
       - ./ui/config.yml:/app/config.yml:ro
 

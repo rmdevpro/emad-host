@@ -58,9 +58,12 @@ async def _get_health_text() -> str:
 
 
 async def on_page_load():
-    health = await _get_health_text()
-    indicator = await check_health()
-    return health, indicator
+    try:
+        health = await _get_health_text()
+        indicator = await check_health()
+        return health, indicator
+    except (httpx.HTTPError, RuntimeError, OSError):
+        return "Unable to reach backend", "\u274c Unreachable"
 
 
 async def check_health() -> str:
@@ -202,7 +205,8 @@ with gr.Blocks(title="eMAD Host", theme=gr.themes.Soft()) as demo:
 
     # ── Events ───────────────────────────────────────────────
 
-    demo.load(fn=on_page_load, outputs=[health_detail, health_bar])
+    # Health check on demand, not on page load (avoids blocking the queue)
+    # demo.load(fn=on_page_load, outputs=[health_detail, health_bar])
 
     # Model switch — clear chat
     model_selector.change(
