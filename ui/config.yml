@@ -1,10 +1,18 @@
-# Gradio Chat UI configuration
+# eMAD Host Chat UI configuration
 port: 7860
 
 mads:
-  - name: Context Broker
+  - name: eMAD Host
     url: http://emad-host-langgraph:8000
     hostname: emad-host-langgraph
 
-# Health poll interval in seconds
+# Available models (host Imperator + installed eMADs)
+models:
+  - host
+  - brin
+  - nadella
+  - weather-reporter
+  - linkedin-jobsearch
+  - linkedin-jobapply
+
 health_poll_interval: 30

@@ -2,7 +2,6 @@
 
 Uses:
   - /v1/chat/completions (OpenAI-compatible) for chat
-  - /mcp (MCP) for conversation management, logs, context info
   - /health for health status
 """
 
@@ -23,10 +22,7 @@ class MADClient:
         self.base_url = base_url.rstrip("/")
         self.hostname = hostname or name
 
-    # ── Health ──────────────────────────────────────────────────────
-
     async def health(self) -> dict:
-        """Check MAD health."""
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.get(f"{self.base_url}/health", timeout=5)
@@ -34,77 +30,66 @@ class MADClient:
         except (httpx.HTTPError, ValueError):
             return {"status": "unreachable"}
 
-    # ── Conversations ───────────────────────────────────────────────
-
-    async def list_conversations(self) -> list[dict]:
-        """List conversations where this MAD is a participant."""
-        args = {"participant": self.hostname, "limit": 50}
-        result = await self._mcp_call("conv_list_conversations", args)
-        return result.get("conversations", [])
-
-    async def create_conversation(self, title: str) -> dict:
-        """Create a new conversation."""
-        return await self._mcp_call("conv_create_conversation", {"title": title})
-
-    async def get_history(self, conversation_id: str) -> list[dict]:
-        """Get message history for a conversation."""
+    async def list_models(self) -> list[str]:
+        """List available models by querying emad_instances + host."""
+        models = ["host"]
         try:
-            result = await self._mcp_call(
-                "conv_get_history",
-                {"conversation_id": conversation_id, "limit": 100},
-            )
-            return result.get("messages", [])
-        except (ValueError, RuntimeError):
-            return []
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    f"{self.base_url}/v1/chat/completions",
+                    json={
+                        "model": "host",
+                        "messages": [{"role": "user", "content": "List all installed eMADs. Just give me the model names, nothing else."}],
+                    },
+                    timeout=60,
+                )
+                # We can't easily parse model names from the response.
+                # Instead, just return what we know from config.
+        except (httpx.HTTPError, ValueError):
+            pass
+        return models
 
-    async def delete_conversation(self, conversation_id: str) -> bool:
-        """Delete a conversation. Returns True on success."""
-        try:
-            await self._mcp_call(
-                "conv_delete_conversation",
-                {"conversation_id": conversation_id},
-            )
-            return True
-        except (ValueError, RuntimeError):
-            return False
-
-    # ── Context Info ────────────────────────────────────────────────
-
-    async def get_context_info(self, conversation_id: str) -> dict:
-        """Get context window info for a conversation."""
-        try:
-            result = await self._mcp_call(
-                "conv_search_context_windows",
-                {"conversation_id": conversation_id, "limit": 5},
-            )
-            return result
-        except (ValueError, RuntimeError):
-            return {}
-
-    # ── Logs ────────────────────────────────────────────────────────
-
-    async def query_logs(self, limit: int = 30) -> list[dict]:
-        """Query recent logs."""
-        result = await self._mcp_call("query_logs", {"limit": limit})
-        return result.get("entries", [])
-
-    # ── Chat ────────────────────────────────────────────────────────
-
-    async def chat_stream(
+    async def chat(
         self,
+        model: str,
         messages: list[dict],
         conversation_id: str | None = None,
-        user: str = "gradio-ui",
-    ) -> AsyncGenerator[str, None]:
-        """Stream chat completions from the Imperator."""
+    ) -> dict:
+        """Send chat completion (non-streaming). Returns full response dict."""
         payload = {
-            "model": "imperator",
+            "model": model,
             "messages": messages,
-            "stream": True,
-            "user": user,
         }
         if conversation_id:
             payload["conversation_id"] = conversation_id
+        else:
+            payload["conversation_id"] = "new"
+
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{self.base_url}/v1/chat/completions",
+                json=payload,
+                timeout=120,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+    async def chat_stream(
+        self,
+        model: str,
+        messages: list[dict],
+        conversation_id: str | None = None,
+    ) -> AsyncGenerator[str, None]:
+        """Stream chat completions. Falls back to non-streaming if SSE not available."""
+        payload = {
+            "model": model,
+            "messages": messages,
+            "stream": True,
+        }
+        if conversation_id:
+            payload["conversation_id"] = conversation_id
+        else:
+            payload["conversation_id"] = "new"
 
         async with httpx.AsyncClient() as client:
             async with client.stream(
@@ -128,10 +113,15 @@ class MADClient:
                     except (json.JSONDecodeError, KeyError, IndexError):
                         continue
 
-    # ── MCP ─────────────────────────────────────────────────────────
+    async def query_logs(self, limit: int = 30) -> list[dict]:
+        """Query recent logs via MCP."""
+        try:
+            result = await self._mcp_call("query_logs", {"limit": limit})
+            return result.get("entries", [])
+        except (RuntimeError, OSError):
+            return []
 
     async def _mcp_call(self, tool_name: str, arguments: dict) -> dict:
-        """Call an MCP tool."""
         payload = {
             "jsonrpc": "2.0",
             "id": 1,
