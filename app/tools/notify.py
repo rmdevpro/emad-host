@@ -49,7 +49,7 @@ async def send_notification(
         loop = asyncio.get_running_loop()
         config = await loop.run_in_executor(None, load_merged_config)
         webhook_url = config.get("imperator", {}).get(
-            "notification_webhook", "http://pmad-template-alerter:8000/webhook"
+            "notification_webhook", "http://emad-host-alerter:8000/webhook"
         )
 
         import httpx

@@ -31,6 +31,8 @@ from app.tools.operational import search_domain_info, store_domain_info
 from app.tools.system import run_command
 from app.tools.web import web_read, web_search
 from app.tools.emad_management import manage_emad
+from app.tools.github import gh_issue_list, gh_issue_create, gh_issue_edit, gh_issue_comment
+from app.tools.scripting import run_python
 
 # Master registry: tool_name -> tool callable
 TOOL_REGISTRY: dict = {
@@ -64,6 +66,13 @@ TOOL_REGISTRY: dict = {
     # Web
     "web_search": web_search,
     "web_read": web_read,
+    # GitHub (job search pipeline)
+    "gh_issue_list": gh_issue_list,
+    "gh_issue_create": gh_issue_create,
+    "gh_issue_edit": gh_issue_edit,
+    "gh_issue_comment": gh_issue_comment,
+    # Scripting (data processing)
+    "run_python": run_python,
     # eMAD management (host Imperator only)
     "manage_emad": manage_emad,
 }
