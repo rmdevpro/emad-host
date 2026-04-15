@@ -172,19 +172,15 @@ def _sync_file_write(path: str, content: str) -> str:
 async def file_write(path: str, content: str) -> str:
     """Write content to a file in the downloads directory.
 
-    Only writes to /data/downloads/ — cannot write anywhere else.
+    Writes to /data/ — cannot write anywhere else.
     Creates the file and parent directories if they don't exist.
 
     Args:
-        path: File path within /data/downloads/.
+        path: Absolute file path within /data/.
         content: Content to write.
     """
-    # Ensure path is within downloads
-    if not path.startswith(_DOWNLOADS_DIR):
-        path = os.path.join(_DOWNLOADS_DIR, path.lstrip("/"))
-
     if not _is_safe_write_path(path):
-        return f"Access denied: can only write to {_DOWNLOADS_DIR}"
+        return f"Access denied: can only write to {_WRITE_ROOTS}"
 
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _sync_file_write, path, content)
