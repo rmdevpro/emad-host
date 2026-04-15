@@ -1,13 +1,14 @@
 """eMAD Host Chat UI — Gradio-based multi-model client.
 
-Talk to the Imperator (host) or any installed eMAD by selecting
-a model from the dropdown. Conversations are tracked via
-conversation_id from the chat completions endpoint.
+Streaming chatbot with model selector, conversation management,
+and stop button. Talks to the backend via OpenAI-compatible
+/v1/chat/completions endpoint.
 """
 
 import json
 import logging
 import os
+import time
 
 import gradio as gr
 import httpx
@@ -37,90 +38,132 @@ CLIENT = MADClient(
     MAD_CFG.get("url", "http://emad-host-langgraph:8000"),
     MAD_CFG.get("hostname", ""),
 )
-
-# Models available — host is always present, eMADs are listed in config
 DEFAULT_MODELS = CONFIG.get("models", ["host"])
 
 
-# ── Helpers ──────────────────────────────────────────────────────────
+# ── Session store (in-memory, per UI instance) ───────────────────────
+# Maps conversation_id -> {model, title, updated}
 
 
-async def _get_health_text() -> str:
-    health = await CLIENT.health()
-    lines = [f"Status: {health.get('status', 'unknown')}"]
-    for key, val in health.items():
-        if key != "status":
-            lines.append(f"  {key}: {val}")
-    return "\n".join(lines)
+_sessions: dict[str, dict] = {}
+
+
+def _save_session(conv_id: str, model: str, last_msg: str):
+    """Track a conversation in the session store."""
+    if not conv_id:
+        return
+    title = last_msg[:50] + "..." if len(last_msg) > 50 else last_msg
+    _sessions[conv_id] = {
+        "model": model,
+        "title": title,
+        "updated": time.time(),
+    }
+
+
+def _get_sessions_for_model(model: str) -> list[tuple[str, str]]:
+    """Return (conv_id, title) pairs for a model, newest first."""
+    items = [
+        (cid, s["title"])
+        for cid, s in _sessions.items()
+        if s["model"] == model
+    ]
+    items.sort(key=lambda x: _sessions[x[0]]["updated"], reverse=True)
+    return items
 
 
 # ── Event handlers ───────────────────────────────────────────────────
 
 
-async def on_page_load():
-    try:
-        health = await _get_health_text()
-        indicator = await check_health()
-        return health, indicator
-    except (httpx.HTTPError, RuntimeError, OSError):
-        return "Unable to reach backend", "\u274c Unreachable"
-
-
-async def check_health() -> str:
-    health = await CLIENT.health()
-    status = health.get("status", "unknown")
-    indicator = {"healthy": "\u2705", "degraded": "\u26a0\ufe0f"}.get(status, "\u274c")
-    return f"{indicator} eMAD Host: {status}"
-
-
-async def on_new_conversation():
+def on_new_conversation():
     return [], None, ""
+
+
+def on_model_changed(model):
+    """Switch model — clear chat, update session list."""
+    sessions = _get_sessions_for_model(model)
+    choices = [f"{title} | {cid}" for cid, title in sessions]
+    return [], None, "", gr.update(choices=choices, value=None)
 
 
 async def on_chat_submit(message, history, model, conv_id):
-    """Send message. Uses conversation_id for persistence."""
-    if not message.strip():
-        yield history, conv_id, gr.update()
+    """Stream response tokens into the chat. Yields intermediate states."""
+    if not message or not message.strip():
+        yield history, conv_id, conv_id or ""
         return
 
-    history = history + [{"role": "user", "content": message}]
-    yield history, conv_id, gr.update()
+    # Yield immediately — user sees their message + thinking indicator
+    history = history + [
+        {"role": "user", "content": message},
+        {"role": "assistant", "content": ""},
+    ]
+    yield history, conv_id, conv_id or ""
 
-    # Build messages for the API — just the latest user message
-    # (the server's checkpointer has the full history)
+    # Send only the latest user message — checkpointer has full history
     api_messages = [{"role": "user", "content": message}]
 
     try:
-        result = await CLIENT.chat(
+        accumulated = ""
+        new_conv_id = conv_id
+
+        # Try streaming first
+        async for token in CLIENT.chat_stream(
             model=model,
             messages=api_messages,
             conversation_id=conv_id,
-        )
+        ):
+            accumulated += token
+            history[-1] = {"role": "assistant", "content": accumulated}
+            yield history, new_conv_id, new_conv_id or ""
 
-        # Extract response
-        content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-        new_conv_id = result.get("conversation_id", conv_id)
+        # If streaming returned nothing, fall back to non-streaming
+        if not accumulated:
+            result = await CLIENT.chat(
+                model=model,
+                messages=api_messages,
+                conversation_id=conv_id,
+            )
+            content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+            new_conv_id = result.get("conversation_id", conv_id)
+            history[-1] = {"role": "assistant", "content": content or "[No response]"}
 
-        if not content:
-            error = result.get("error", {})
-            if isinstance(error, dict):
-                content = f"Error: {error.get('message', 'Unknown error')}"
-            elif error:
-                content = f"Error: {error}"
-            else:
-                content = "[No response]"
+        # If we still don't have a conversation_id (streaming doesn't return it),
+        # make a lightweight non-streaming call to get it
+        if not new_conv_id and accumulated:
+            try:
+                result = await CLIENT.chat(
+                    model=model,
+                    messages=[{"role": "user", "content": ""}],
+                    conversation_id=conv_id,
+                )
+                new_conv_id = result.get("conversation_id", conv_id)
+            except Exception:
+                pass
 
-        history = history + [{"role": "assistant", "content": content}]
-        yield history, new_conv_id, gr.update()
+        # Save to session store
+        _save_session(new_conv_id, model, message)
+        yield history, new_conv_id, new_conv_id or ""
 
+    except httpx.ReadTimeout:
+        history[-1] = {"role": "assistant", "content": "Response timed out. The agent may still be processing. Try asking 'what happened?' to resume."}
+        yield history, conv_id, conv_id or ""
     except (httpx.HTTPError, RuntimeError, OSError) as exc:
-        history = history + [{"role": "assistant", "content": f"Error: {exc}"}]
-        yield history, conv_id, gr.update()
+        history[-1] = {"role": "assistant", "content": f"Error: {exc}"}
+        yield history, conv_id, conv_id or ""
 
 
-async def on_model_changed():
-    """Clear chat when switching models."""
-    return [], None, ""
+def on_session_selected(selection, model):
+    """Load a previous conversation by its ID."""
+    if not selection or "|" not in selection:
+        return gr.update(), gr.update(), gr.update()
+    conv_id = selection.split("|")[-1].strip()
+    return [], conv_id, conv_id
+
+
+def on_refresh_sessions(model):
+    """Refresh the session list for the current model."""
+    sessions = _get_sessions_for_model(model)
+    choices = [f"{title} | {cid}" for cid, title in sessions]
+    return gr.update(choices=choices)
 
 
 async def on_refresh_logs():
@@ -142,35 +185,51 @@ async def on_refresh_logs():
 # ── Build the UI ─────────────────────────────────────────────────────
 
 
-with gr.Blocks(title="eMAD Host", theme=gr.themes.Soft()) as demo:
-    # State: current conversation_id (returned by server)
+with gr.Blocks(
+    title="eMAD Host",
+    theme=gr.themes.Soft(),
+    css="""
+        .chatbot-container { min-height: 500px; }
+        .stop-btn { background-color: #ef4444 !important; }
+    """,
+) as demo:
     conv_state = gr.State(None)
-
-    gr.Markdown("# eMAD Host")
-    health_bar = gr.Markdown("")
+    msg_state = gr.State("")  # Holds message while input clears
 
     with gr.Row():
         # ── Left sidebar ─────────────────────────────────────
-        with gr.Column(scale=1, min_width=220):
+        with gr.Column(scale=1, min_width=240):
+            gr.Markdown("### eMAD Host")
+
             model_selector = gr.Dropdown(
                 choices=DEFAULT_MODELS,
                 value=DEFAULT_MODELS[0] if DEFAULT_MODELS else "host",
-                label="Model",
+                label="Agent",
             )
 
             new_conv_btn = gr.Button(
                 "New Conversation", size="sm", variant="primary"
             )
 
+            gr.Markdown("#### Conversations")
+            session_list = gr.Radio(
+                choices=[],
+                value=None,
+                label="",
+                show_label=False,
+                interactive=True,
+            )
+            refresh_sessions_btn = gr.Button("Refresh", size="sm")
+
+            gr.Markdown("---")
             conv_id_display = gr.Textbox(
                 label="Conversation ID",
                 interactive=False,
                 lines=1,
                 max_lines=1,
             )
-
             resume_input = gr.Textbox(
-                label="Resume conversation",
+                label="Resume by ID",
                 placeholder="Paste conversation ID...",
                 lines=1,
                 max_lines=1,
@@ -179,39 +238,34 @@ with gr.Blocks(title="eMAD Host", theme=gr.themes.Soft()) as demo:
 
         # ── Chat panel ───────────────────────────────────────
         with gr.Column(scale=4):
-            chatbot = gr.Chatbot(type="messages", height=550)
+            chatbot = gr.Chatbot(
+                type="messages",
+                height=600,
+                show_label=False,
+                elem_classes=["chatbot-container"],
+            )
             with gr.Row():
                 msg_input = gr.Textbox(
                     placeholder="Message...",
                     show_label=False,
-                    scale=6,
+                    scale=7,
+                    autofocus=True,
                 )
                 send_btn = gr.Button("Send", scale=1, variant="primary")
+                stop_btn = gr.Button("Stop", scale=1, variant="stop")
 
     # ── System Info (bottom) ─────────────────────────────────
     with gr.Accordion("System Info", open=False):
-        with gr.Row():
-            with gr.Column():
-                gr.Markdown("#### Health")
-                health_detail = gr.Textbox(
-                    lines=4, interactive=False, show_label=False
-                )
-            with gr.Column():
-                gr.Markdown("#### Logs")
-                log_panel = gr.Textbox(
-                    lines=6, interactive=False, show_label=False
-                )
-                refresh_logs_btn = gr.Button("Refresh Logs", size="sm")
+        log_panel = gr.Textbox(lines=6, interactive=False, show_label=False)
+        refresh_logs_btn = gr.Button("Refresh Logs", size="sm")
 
     # ── Events ───────────────────────────────────────────────
 
-    # Health check on demand, not on page load (avoids blocking the queue)
-    # demo.load(fn=on_page_load, outputs=[health_detail, health_bar])
-
-    # Model switch — clear chat
+    # Model switch — clear chat, update session list
     model_selector.change(
         fn=on_model_changed,
-        outputs=[chatbot, conv_state, conv_id_display],
+        inputs=[model_selector],
+        outputs=[chatbot, conv_state, conv_id_display, session_list],
     )
 
     # New conversation
@@ -220,7 +274,20 @@ with gr.Blocks(title="eMAD Host", theme=gr.themes.Soft()) as demo:
         outputs=[chatbot, conv_state, conv_id_display],
     )
 
-    # Resume conversation by ID
+    # Session list — select previous conversation
+    session_list.change(
+        fn=on_session_selected,
+        inputs=[session_list, model_selector],
+        outputs=[chatbot, conv_state, conv_id_display],
+    )
+
+    refresh_sessions_btn.click(
+        fn=on_refresh_sessions,
+        inputs=[model_selector],
+        outputs=[session_list],
+    )
+
+    # Resume by pasting ID
     def on_resume(resume_id):
         if resume_id and resume_id.strip():
             return [], resume_id.strip(), resume_id.strip()
@@ -232,26 +299,32 @@ with gr.Blocks(title="eMAD Host", theme=gr.themes.Soft()) as demo:
         outputs=[chatbot, conv_state, conv_id_display],
     )
 
-    # Chat submit
-    send_btn.click(
+    # Chat submit — Send button
+    # 1. Stash message and clear input immediately
+    # 2. Run streaming generator
+    submit_click = send_btn.click(
+        fn=lambda m: ("", m),
+        inputs=[msg_input],
+        outputs=[msg_input, msg_state],
+    ).then(
         fn=on_chat_submit,
-        inputs=[msg_input, chatbot, model_selector, conv_state],
+        inputs=[msg_state, chatbot, model_selector, conv_state],
         outputs=[chatbot, conv_state, conv_id_display],
-    ).then(
-        fn=lambda: "", outputs=[msg_input]
-    ).then(
-        fn=lambda cid: cid or "", inputs=[conv_state], outputs=[conv_id_display]
     )
 
-    msg_input.submit(
+    # Chat submit — Enter key
+    submit_enter = msg_input.submit(
+        fn=lambda m: ("", m),
+        inputs=[msg_input],
+        outputs=[msg_input, msg_state],
+    ).then(
         fn=on_chat_submit,
-        inputs=[msg_input, chatbot, model_selector, conv_state],
+        inputs=[msg_state, chatbot, model_selector, conv_state],
         outputs=[chatbot, conv_state, conv_id_display],
-    ).then(
-        fn=lambda: "", outputs=[msg_input]
-    ).then(
-        fn=lambda cid: cid or "", inputs=[conv_state], outputs=[conv_id_display]
     )
+
+    # Stop button cancels the running generator
+    stop_btn.click(fn=None, cancels=[submit_click, submit_enter])
 
     # Logs
     refresh_logs_btn.click(fn=on_refresh_logs, outputs=[log_panel])
