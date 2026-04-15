@@ -17,9 +17,9 @@ from langchain_core.tools import tool
 _log = logging.getLogger("emad_host.tools.filesystem")
 
 # Allowed read roots — the Imperator can inspect its own code and config
-_READ_ROOTS = ["/app", "/config", "/data"]
-# Write is restricted to downloads directory only
-_DOWNLOADS_DIR = "/data/downloads"
+_READ_ROOTS = ["/app", "/config", "/data", "/emads", "/storage"]
+# Write is restricted to downloads and data directories
+_WRITE_ROOTS = ["/data"]
 # System prompt directory
 _PROMPTS_DIR = "/config/prompts"
 
@@ -34,10 +34,10 @@ def _is_safe_read_path(path: str) -> bool:
 
 
 def _is_safe_write_path(path: str) -> bool:
-    """Check if a path is within the downloads directory."""
+    """Check if a path is within allowed write directories."""
     try:
         resolved = str(Path(path).resolve())
-        return resolved.startswith(_DOWNLOADS_DIR)
+        return any(resolved.startswith(root) for root in _WRITE_ROOTS)
     except (OSError, ValueError):
         return False
 

@@ -44,6 +44,7 @@ services:
       - ./data:/data
       - ./config/runbooks:/config/runbooks:ro
       - ./emads:/emads
+      - /mnt/storage:/storage
     env_file:
       - ./config/credentials/.env
     environment:
