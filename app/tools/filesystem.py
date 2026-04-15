@@ -1,7 +1,7 @@
 """Filesystem tools — read-only access + downloads + system prompt.
 
-Read-only: sandboxed to allowed roots (/app, /config, /data).
-Write: only to /data/downloads/.
+Read: /app, /config, /data, /emads, /storage.
+Write: /data.
 System prompt: read and update the Imperator's own prompt file.
 """
 
@@ -58,8 +58,8 @@ def _sync_file_read(path: str, max_chars: int) -> str:
 async def file_read(path: str, max_chars: int = 50000) -> str:
     """Read a file from the filesystem.
 
-    Sandboxed to /app, /config, and /data directories.
-    Use this to inspect source code, configuration, prompts, or data files.
+    Allowed directories: /app, /config, /data, /emads, /storage.
+    Use this to read source code, configuration, credentials, prompts, or data files.
 
     Args:
         path: Absolute path to the file.
@@ -94,7 +94,7 @@ def _sync_file_list(path: str) -> str:
 async def file_list(path: str = "/app") -> str:
     """List directory contents.
 
-    Sandboxed to /app, /config, and /data directories.
+    Allowed directories: /app, /config, /data, /emads, /storage.
 
     Args:
         path: Directory path to list (default /app).
@@ -139,7 +139,7 @@ async def file_search(path: str, pattern: str, max_results: int = 20) -> str:
     """Search file contents for a pattern (like grep).
 
     Searches recursively through text files in the given directory.
-    Sandboxed to /app, /config, and /data directories.
+    Allowed directories: /app, /config, /data, /emads, /storage.
 
     Args:
         path: Directory to search in.
