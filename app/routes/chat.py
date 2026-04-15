@@ -35,20 +35,28 @@ _graph_cache: dict = {}
 async def _get_stategraph(model_name: str):
     """Look up and return a compiled stategraph for the given model name.
 
-    Compiles a fresh graph each invocation so the checkpointer can
-    properly load/save conversation state between calls.
+    Graphs are cached after first build. The subgraph pattern means the
+    outer graph is stateless and the inner graph uses thread_id config
+    for checkpointer state, so caching is safe.
 
     Lookup order:
-    1. Host Imperator (model name "host")
-    2. Routing table in DB (emad_instances → package_name → build_graph)
+    1. Cache hit
+    2. Host Imperator (model name "host")
+    3. Routing table in DB (emad_instances → package_name → build_graph)
     """
+    # Check cache first
+    if model_name in _graph_cache:
+        return _graph_cache[model_name]
+
     from app.package_registry import get_imperator_builder, get_build_func
 
     # Host Imperator
     if model_name == "host":
         builder = get_imperator_builder()
         if builder is not None:
-            return builder()
+            graph = builder()
+            _graph_cache[model_name] = graph
+            return graph
         return None
 
     # eMAD routing table — look up package name from DB
