@@ -53,3 +53,4 @@ __pycache__/
 build/
 dist/
 *.whl
+.playwright-mcp/
