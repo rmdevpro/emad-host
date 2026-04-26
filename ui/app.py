@@ -1,17 +1,15 @@
 """eMAD Host Chat UI — Gradio-based multi-model client.
 
-Streaming chatbot with model selector, conversation management,
-and stop button. Talks to the backend via OpenAI-compatible
-/v1/chat/completions endpoint.
+Split into user_step (synchronous, instant: clears input + shows user
+message + thinking indicator) and bot_step (async generator: streams the
+assistant response token-by-token). The stop button cancels the chain.
+Sidebar lists prior conversations filtered by the selected model.
 """
 
-import json
 import logging
 import os
-import time
 
 import gradio as gr
-import httpx
 import yaml
 
 from mad_client import MADClient
@@ -38,132 +36,144 @@ CLIENT = MADClient(
     MAD_CFG.get("url", "http://emad-host-langgraph:8000"),
     MAD_CFG.get("hostname", ""),
 )
+
 DEFAULT_MODELS = CONFIG.get("models", ["host"])
+INITIAL_MODEL = DEFAULT_MODELS[0] if DEFAULT_MODELS else "host"
+
+THINKING = "_⏳ Thinking…_"
 
 
-# ── Session store (in-memory, per UI instance) ───────────────────────
-# Maps conversation_id -> {model, title, updated}
+# ── Helpers ──────────────────────────────────────────────────────────
 
 
-_sessions: dict[str, dict] = {}
-
-
-def _save_session(conv_id: str, model: str, last_msg: str):
-    """Track a conversation in the session store."""
-    if not conv_id:
-        return
-    title = last_msg[:50] + "..." if len(last_msg) > 50 else last_msg
-    _sessions[conv_id] = {
-        "model": model,
-        "title": title,
-        "updated": time.time(),
-    }
-
-
-def _get_sessions_for_model(model: str) -> list[tuple[str, str]]:
-    """Return (conv_id, title) pairs for a model, newest first."""
-    items = [
-        (cid, s["title"])
-        for cid, s in _sessions.items()
-        if s["model"] == model
-    ]
-    items.sort(key=lambda x: _sessions[x[0]]["updated"], reverse=True)
-    return items
+def _format_conv_choices(convs: list[dict]) -> list[tuple[str, str]]:
+    """Format conversation list as (label, value) tuples for a Radio component."""
+    choices = []
+    for c in convs:
+        cid = c.get("conversation_id", "")
+        title = (c.get("title") or "").strip() or f"({cid[:8]}…)"
+        label = title if len(title) <= 60 else title[:57] + "…"
+        choices.append((label, cid))
+    return choices
 
 
 # ── Event handlers ───────────────────────────────────────────────────
 
 
+async def on_startup(model):
+    """Load conversation list for the initial model."""
+    convs = await CLIENT.list_conversations(model=model, limit=50)
+    return gr.update(choices=_format_conv_choices(convs), value=None)
+
+
+async def on_refresh_conversations(model):
+    convs = await CLIENT.list_conversations(model=model, limit=50)
+    return gr.update(choices=_format_conv_choices(convs), value=None)
+
+
+async def on_model_changed(model):
+    """Model changed: clear chat, clear conv_id, refresh conversation list."""
+    convs = await CLIENT.list_conversations(model=model, limit=50)
+    return (
+        [],
+        None,
+        "",
+        gr.update(choices=_format_conv_choices(convs), value=None),
+    )
+
+
 def on_new_conversation():
-    return [], None, ""
+    return [], None, "", gr.update(value=None)
 
 
-def on_model_changed(model):
-    """Switch model — clear chat, update session list."""
-    sessions = _get_sessions_for_model(model)
-    choices = [f"{title} | {cid}" for cid, title in sessions]
-    return [], None, "", gr.update(choices=choices, value=None)
+async def on_pick_conversation(conv_id):
+    """User clicked a conversation in the sidebar — load its messages."""
+    if not conv_id:
+        return gr.update(), gr.update(), gr.update()
+    conv = await CLIENT.get_conversation(conv_id)
+    if conv is None:
+        return [], None, ""
+    messages = [
+        {"role": m["role"], "content": m["content"]}
+        for m in conv.get("messages", [])
+    ]
+    return messages, conv_id, conv_id
 
 
-async def on_chat_submit(message, history, model, conv_id):
-    """Stream response tokens into the chat. Yields intermediate states."""
-    if not message or not message.strip():
+async def on_delete_conversation(conv_id, current_conv_id, model):
+    """Delete the selected conversation. If it was active, clear chat."""
+    if not conv_id:
+        return gr.update(), gr.update(), gr.update(), gr.update()
+    await CLIENT.delete_conversation(conv_id)
+    convs = await CLIENT.list_conversations(model=model, limit=50)
+    choices_update = gr.update(choices=_format_conv_choices(convs), value=None)
+    if conv_id == current_conv_id:
+        return [], None, "", choices_update
+    return gr.update(), gr.update(), gr.update(), choices_update
+
+
+def user_step(message, history, conv_id):
+    """Synchronous: clear input, append user message + thinking indicator.
+
+    Returns instantly so the user sees their message appear immediately.
+    """
+    msg = (message or "").strip()
+    if not msg:
+        return "", history, conv_id or "", ""
+    history = history + [
+        {"role": "user", "content": msg},
+        {"role": "assistant", "content": THINKING},
+    ]
+    return "", history, conv_id or "", msg
+
+
+async def bot_step(history, conv_id, pending_message, current_model):
+    """Async generator: stream assistant response token-by-token."""
+    if not pending_message:
         yield history, conv_id, conv_id or ""
         return
 
-    # Yield immediately — user sees their message + thinking indicator
-    history = history + [
-        {"role": "user", "content": message},
-        {"role": "assistant", "content": ""},
+    api_messages = [
+        {"role": msg["role"], "content": msg["content"]}
+        for msg in history[:-1]
     ]
-    yield history, conv_id, conv_id or ""
 
-    # Send only the latest user message — checkpointer has full history
-    api_messages = [{"role": "user", "content": message}]
+    accumulated = ""
+    new_conv_id = conv_id
+    saw_token = False
 
     try:
-        accumulated = ""
-        new_conv_id = conv_id
-
-        # Try streaming first
-        async for token in CLIENT.chat_stream(
-            model=model,
+        async for event in CLIENT.chat_stream(
+            model=current_model,
             messages=api_messages,
             conversation_id=conv_id,
         ):
-            accumulated += token
-            history[-1] = {"role": "assistant", "content": accumulated}
-            yield history, new_conv_id, new_conv_id or ""
-
-        # If streaming returned nothing, fall back to non-streaming
-        if not accumulated:
-            result = await CLIENT.chat(
-                model=model,
-                messages=api_messages,
-                conversation_id=conv_id,
-            )
-            content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-            new_conv_id = result.get("conversation_id", conv_id)
-            history[-1] = {"role": "assistant", "content": content or "[No response]"}
-
-        # If we still don't have a conversation_id (streaming doesn't return it),
-        # make a lightweight non-streaming call to get it
-        if not new_conv_id and accumulated:
-            try:
-                result = await CLIENT.chat(
-                    model=model,
-                    messages=[{"role": "user", "content": ""}],
-                    conversation_id=conv_id,
-                )
-                new_conv_id = result.get("conversation_id", conv_id)
-            except Exception:
-                pass
-
-        # Save to session store
-        _save_session(new_conv_id, model, message)
+            if event.kind == "token":
+                accumulated += event.text
+                saw_token = True
+                history[-1] = {"role": "assistant", "content": accumulated}
+                yield history, new_conv_id, new_conv_id or ""
+            elif event.kind == "meta" and event.conversation_id:
+                new_conv_id = event.conversation_id
+                yield history, new_conv_id, new_conv_id or ""
+            elif event.kind == "error":
+                history[-1] = {
+                    "role": "assistant",
+                    "content": f"⚠️ Stream error: {event.text}",
+                }
+                yield history, new_conv_id, new_conv_id or ""
+                return
+    except Exception as exc:  # noqa: BLE001
+        history[-1] = {
+            "role": "assistant",
+            "content": f"⚠️ {type(exc).__name__}: {exc}",
+        }
         yield history, new_conv_id, new_conv_id or ""
+        return
 
-    except httpx.ReadTimeout:
-        history[-1] = {"role": "assistant", "content": "Response timed out. The agent may still be processing. Try asking 'what happened?' to resume."}
-        yield history, conv_id, conv_id or ""
-    except (httpx.HTTPError, RuntimeError, OSError) as exc:
-        history[-1] = {"role": "assistant", "content": f"Error: {exc}"}
-        yield history, conv_id, conv_id or ""
-
-
-def on_session_selected(selection, model):
-    """Load a previous conversation by its ID."""
-    if not selection or "|" not in selection:
-        return gr.update(), gr.update(), gr.update()
-    conv_id = selection.split("|")[-1].strip()
-    return [], conv_id, conv_id
-
-
-def on_refresh_sessions(model):
-    """Refresh the session list for the current model."""
-    sessions = _get_sessions_for_model(model)
-    choices = [f"{title} | {cid}" for cid, title in sessions]
-    return gr.update(choices=choices)
+    if not saw_token:
+        history[-1] = {"role": "assistant", "content": "[No response]"}
+        yield history, new_conv_id, new_conv_id or ""
 
 
 async def on_refresh_logs():
@@ -185,151 +195,127 @@ async def on_refresh_logs():
 # ── Build the UI ─────────────────────────────────────────────────────
 
 
-with gr.Blocks(
-    title="eMAD Host",
-    theme=gr.themes.Soft(),
-    css="""
-        .chatbot-container { min-height: 500px; }
-        .stop-btn { background-color: #ef4444 !important; }
-    """,
-) as demo:
+with gr.Blocks(title="eMAD Host", theme=gr.themes.Soft()) as demo:
     conv_state = gr.State(None)
-    msg_state = gr.State("")  # Holds message while input clears
+    pending_msg_state = gr.State("")
+
+    gr.Markdown("# eMAD Host")
 
     with gr.Row():
-        # ── Left sidebar ─────────────────────────────────────
-        with gr.Column(scale=1, min_width=240):
-            gr.Markdown("### eMAD Host")
-
+        with gr.Column(scale=1, min_width=260):
             model_selector = gr.Dropdown(
                 choices=DEFAULT_MODELS,
-                value=DEFAULT_MODELS[0] if DEFAULT_MODELS else "host",
-                label="Agent",
+                value=INITIAL_MODEL,
+                label="Model",
+                interactive=True,
             )
-
             new_conv_btn = gr.Button(
-                "New Conversation", size="sm", variant="primary"
+                "➕ New Conversation", size="sm", variant="primary"
             )
 
             gr.Markdown("#### Conversations")
-            session_list = gr.Radio(
+            conv_list = gr.Radio(
                 choices=[],
-                value=None,
                 label="",
-                show_label=False,
                 interactive=True,
+                container=False,
             )
-            refresh_sessions_btn = gr.Button("Refresh", size="sm")
+            with gr.Row():
+                refresh_convs_btn = gr.Button("🔄 Refresh", size="sm")
+                delete_conv_btn = gr.Button("🗑 Delete", size="sm", variant="stop")
 
-            gr.Markdown("---")
             conv_id_display = gr.Textbox(
-                label="Conversation ID",
+                label="Active conversation ID",
                 interactive=False,
                 lines=1,
                 max_lines=1,
             )
-            resume_input = gr.Textbox(
-                label="Resume by ID",
-                placeholder="Paste conversation ID...",
-                lines=1,
-                max_lines=1,
-            )
-            resume_btn = gr.Button("Resume", size="sm")
 
-        # ── Chat panel ───────────────────────────────────────
         with gr.Column(scale=4):
             chatbot = gr.Chatbot(
                 type="messages",
-                height=600,
-                show_label=False,
-                elem_classes=["chatbot-container"],
+                height=560,
+                show_copy_button=True,
+                avatar_images=(None, None),
             )
             with gr.Row():
                 msg_input = gr.Textbox(
-                    placeholder="Message...",
+                    placeholder="Type a message and press Enter…",
                     show_label=False,
-                    scale=7,
+                    scale=6,
                     autofocus=True,
+                    submit_btn=False,
                 )
                 send_btn = gr.Button("Send", scale=1, variant="primary")
                 stop_btn = gr.Button("Stop", scale=1, variant="stop")
 
-    # ── System Info (bottom) ─────────────────────────────────
     with gr.Accordion("System Info", open=False):
+        gr.Markdown("#### Logs")
         log_panel = gr.Textbox(lines=6, interactive=False, show_label=False)
         refresh_logs_btn = gr.Button("Refresh Logs", size="sm")
 
     # ── Events ───────────────────────────────────────────────
 
-    # Model switch — clear chat, update session list
+    demo.load(
+        fn=on_startup,
+        inputs=[model_selector],
+        outputs=[conv_list],
+    )
+
     model_selector.change(
         fn=on_model_changed,
         inputs=[model_selector],
-        outputs=[chatbot, conv_state, conv_id_display, session_list],
+        outputs=[chatbot, conv_state, conv_id_display, conv_list],
     )
 
-    # New conversation
     new_conv_btn.click(
         fn=on_new_conversation,
-        outputs=[chatbot, conv_state, conv_id_display],
+        outputs=[chatbot, conv_state, conv_id_display, conv_list],
     )
 
-    # Session list — select previous conversation
-    session_list.change(
-        fn=on_session_selected,
-        inputs=[session_list, model_selector],
-        outputs=[chatbot, conv_state, conv_id_display],
-    )
-
-    refresh_sessions_btn.click(
-        fn=on_refresh_sessions,
+    refresh_convs_btn.click(
+        fn=on_refresh_conversations,
         inputs=[model_selector],
-        outputs=[session_list],
+        outputs=[conv_list],
     )
 
-    # Resume by pasting ID
-    def on_resume(resume_id):
-        if resume_id and resume_id.strip():
-            return [], resume_id.strip(), resume_id.strip()
-        return gr.update(), gr.update(), gr.update()
-
-    resume_btn.click(
-        fn=on_resume,
-        inputs=[resume_input],
+    conv_list.change(
+        fn=on_pick_conversation,
+        inputs=[conv_list],
         outputs=[chatbot, conv_state, conv_id_display],
     )
 
-    # Chat submit — Send button
-    # 1. Stash message and clear input immediately
-    # 2. Run streaming generator
-    submit_click = send_btn.click(
-        fn=lambda m: ("", m),
-        inputs=[msg_input],
-        outputs=[msg_input, msg_state],
-    ).then(
-        fn=on_chat_submit,
-        inputs=[msg_state, chatbot, model_selector, conv_state],
-        outputs=[chatbot, conv_state, conv_id_display],
+    delete_conv_btn.click(
+        fn=on_delete_conversation,
+        inputs=[conv_list, conv_state, model_selector],
+        outputs=[chatbot, conv_state, conv_id_display, conv_list],
     )
 
-    # Chat submit — Enter key
-    submit_enter = msg_input.submit(
-        fn=lambda m: ("", m),
-        inputs=[msg_input],
-        outputs=[msg_input, msg_state],
-    ).then(
-        fn=on_chat_submit,
-        inputs=[msg_state, chatbot, model_selector, conv_state],
-        outputs=[chatbot, conv_state, conv_id_display],
-    )
+    def _make_chat_chain(trigger):
+        return trigger(
+            fn=user_step,
+            inputs=[msg_input, chatbot, conv_state],
+            outputs=[msg_input, chatbot, conv_id_display, pending_msg_state],
+        ).then(
+            fn=bot_step,
+            inputs=[chatbot, conv_state, pending_msg_state, model_selector],
+            outputs=[chatbot, conv_state, conv_id_display],
+        ).then(
+            fn=on_refresh_conversations,
+            inputs=[model_selector],
+            outputs=[conv_list],
+        )
 
-    # Stop button cancels the running generator
-    stop_btn.click(fn=None, cancels=[submit_click, submit_enter])
+    send_event = _make_chat_chain(send_btn.click)
+    enter_event = _make_chat_chain(msg_input.submit)
 
-    # Logs
+    stop_btn.click(fn=None, cancels=[send_event, enter_event])
+
     refresh_logs_btn.click(fn=on_refresh_logs, outputs=[log_panel])
 
 
 if __name__ == "__main__":
     port = CONFIG.get("port", 7860)
-    demo.launch(server_name="0.0.0.0", server_port=port)
+    demo.queue(default_concurrency_limit=4).launch(
+        server_name="0.0.0.0", server_port=port
+    )

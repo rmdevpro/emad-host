@@ -103,6 +103,42 @@ async def _migration_004(conn) -> None:
     _log.info("Migration 004 complete — emad_packages and emad_instances tables")
 
 
+async def _migration_006(conn) -> None:
+    """Migration 6: Create conversations + conversation_messages tables.
+
+    Lightweight sidecar for the UI sidebar: lets the UI list prior
+    conversations filtered by model and restore message history on
+    resume. Written from the chat completions endpoint after each turn.
+    """
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS conversations (
+            conversation_id UUID PRIMARY KEY,
+            model           VARCHAR(100) NOT NULL,
+            title           TEXT         NOT NULL DEFAULT '',
+            created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+            updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+        )
+    """)
+    await conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_conversations_model_updated
+            ON conversations(model, updated_at DESC)
+    """)
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS conversation_messages (
+            id              BIGSERIAL PRIMARY KEY,
+            conversation_id UUID NOT NULL REFERENCES conversations(conversation_id) ON DELETE CASCADE,
+            role            VARCHAR(20) NOT NULL,
+            content         TEXT        NOT NULL,
+            created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    """)
+    await conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_conv_messages
+            ON conversation_messages(conversation_id, created_at ASC)
+    """)
+    _log.info("Migration 006 complete — conversations + conversation_messages tables")
+
+
 async def _migration_005(conn) -> None:
     """Migration 5: Create domain_information table with auto-embedding trigger."""
     await conn.execute("""
@@ -168,6 +204,11 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
         5,
         "Create domain_information table with auto-embedding trigger",
         _migration_005,
+    ),
+    (
+        6,
+        "Create conversations + conversation_messages tables for UI sidebar",
+        _migration_006,
     ),
 ]
 
