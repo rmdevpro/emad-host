@@ -11,7 +11,9 @@
 services:
 
   emad-host:
-    image: nginx:1.28.0-alpine
+    build:
+      context: ./nginx
+    image: emad-host-nginx:latest
     container_name: emad-host
     hostname: emad-host
     restart: unless-stopped
@@ -20,8 +22,6 @@ services:
       - emad-host-net
     ports:
       - "8080:8080"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/health"]
       interval: 30s
@@ -84,6 +84,7 @@ services:
   emad-host-log-shipper:
     build:
       context: ./log_shipper
+    image: emad-host-log-shipper:latest
     container_name: emad-host-log-shipper
     hostname: emad-host-log-shipper
     restart: unless-stopped
@@ -119,6 +120,7 @@ services:
   emad-host-ui:
     build:
       context: ./ui
+    image: emad-host-ui:latest
     container_name: emad-host-ui
     hostname: emad-host-ui
     restart: unless-stopped
@@ -133,6 +135,7 @@ services:
   emad-host-alerter:
     build:
       context: ./alerter
+    image: emad-host-alerter:latest
     container_name: emad-host-alerter
     hostname: emad-host-alerter
     restart: unless-stopped
